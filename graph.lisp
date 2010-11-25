@@ -344,8 +344,8 @@ Recursively doing the same with the other stages"
 (defun make-kronecker-product-node ()
   (make-node :content (gensym "Kron")))
 
-(defun make-entanglement-node
-   (make-node :content (gensym "Entangle")) )
+(defun make-entanglement-node ()
+  (make-node :content (gensym "Entangle")))
 
 (defmethod make-operation-graph ((operation ag-entanglement) input-nodes)
   (let* ((output-node (make-tangle))
@@ -359,17 +359,20 @@ Recursively doing the same with the other stages"
 			      (list (make-computation-node operation))
 			      (list output-node)))
 		     (otherwise (error "Entanglement operation got more than 2 input nodes, this shouldn't happen.")))))
-    (pipeline-connect )
-    (make-graph :nodes pipeline
+    (pipeline-connect (car pipeline) (cdr pipeline))
+    (make-graph :nodes (alexandria:flatten pipeline)
 		:input-nodes input-nodes
 		:output-nodes (list output-node))))
-  
+
+
+
+
 
 ;;;;  UTILITY FUNCTIONS
 
 (defun between (i min max)
   (and (>= i min)
-       (<= i max)))
+       (<= i max))) 
 
 ;;;; TESTS
 

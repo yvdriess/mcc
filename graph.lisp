@@ -509,9 +509,9 @@ predicate to its _content_."
 		    #'(lambda (content)
 			(and (signal-map-p content)
 			     (subsetp qubit-signal-dependencies
-				      (signal-map-qubit-signals qubit-signal-dependencies))
+				      (signal-map-qubit-signals content))
 			     (subsetp input-signal-dependencies
-				      (signal-map-input-signals input-signal-dependencies))))))
+				      (signal-map-input-signals content))))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

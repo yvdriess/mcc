@@ -30,6 +30,7 @@
   `((pi/2  . ,(/ pi 2))
     (pi/4  . ,(/ pi 4))
     (pi/8  . ,(/ pi 8))
+;    (pi    . ,pi)
     (-pi   . ,(- pi))
     (-pi/2 . ,(- (/ pi 2)))
     (-pi/4 . ,(- (/ pi 4)))
@@ -53,7 +54,9 @@
     (symbol (let ((angle-constant-entry (assoc angle +angle-constants+)))
 	      (if angle-constant-entry
 		  (cdr angle-constant-entry)
-		  (error "Invalid measurment angle: ~A~%" angle))))
+		  (eval-lisp-angle angle)
+		  ;(error "Invalid measurment angle: ~A~%" angle)
+		  )))
     (cons (eval-angle (eval-lisp-angle angle)))
     (otherwise (error "Measurement operation does not have a valid measurement angle: ~A~%" angle))))
 
@@ -311,6 +314,17 @@ overwritten."
 	      :input-nodes (first pipeline-stages)
 	      :output-nodes (first (last pipeline-stages))))
 
+(defun find-output-node (graph pred-func)
+  "Returns the first output node that returns true when applying the
+predicate to its _content_."
+  (declare (type graph graph))
+  (declare (type function pred-func))
+  (some #'(lambda (node)
+	    (let ((content (node-content node)))
+	      (when (funcall pred-func content)
+		node)))
+	(graph-output-nodes graph)))
+
 
 ;;; 3.2 Compiler Datastructures
 
@@ -353,18 +367,23 @@ overwritten."
 (defgeneric qubit-dependencies (operation))
 (defmethod qubit-dependencies ((operation ag-measurement))
   (list (ag-measurement-qubit operation)))
-
 (defmethod qubit-dependencies ((operation ag-entanglement))
   (list (ag-entanglement-qubit-1 operation)
 	(ag-entanglement-qubit-2 operation)))
 
 (defgeneric qubit-signal-dependencies (operation))
 (defmethod qubit-signal-dependencies ((operation ag-measurement))
-  )
+    (append (ag-signal-qubit-flags (ag-measurement-s-signal operation))
+	    (ag-signal-qubit-flags (ag-measurement-t-signal operation))))
+(defmethod qubit-signal-dependencies ((operation ag-correction))
+  (ag-signal-qubit-flags (ag-correction-s-signal operation)))
 
 (defgeneric input-signal-dependencies (operation))
 (defmethod input-signal-dependencies ((operation ag-measurement))
-  )
+  (append (ag-signal-lookup-flags (ag-measurement-s-signal operation))
+	  (ag-signal-lookup-flags (ag-measurement-t-signal operation))))
+(defmethod input-signal-dependencies ((operation ag-correction))
+  (ag-signal-lookup-flags (ag-correction-s-signal operation)))
 
 (defun ensure-tangle-node (node operation)
   (if node
@@ -381,34 +400,71 @@ get added in the wrong order?"))
 	     (make-data-node (make-signal-map :input-signals (input-signal-dependencies operation)
 					      :qubit-signals (qubit-signal-dependencies operation))))))
 
-;; Operation-specific program graph code
+;;; 3.3 MAKE-OPERATION-GRAPH
 
 (defgeneric make-operation-graph (operation input-nodes))
 (defmethod make-operation-graph ((operation ag-entanglement) input-nodes)
-  (let* ((output-node (make-output-node operation input-nodes))
-	 (entangle-node (make-computation-node operation)))
-    (case (length input-nodes)
-      (1 (pipeline-to-graph (pipeline (stage input-nodes)
-				      (stage entangle-node)
-				      (stage output-node))))
-      (2 (let ((kron-operation-graph (make-operation-graph (make-kronecker-operation :qubit-1 (ag-entanglement-qubit-1 operation)
-										     :qubit-2 (ag-entanglement-qubit-2 operation)) 
-							   input-nodes)))
-	   (merge-program-graphs kron-operation-graph
-				 (make-operation-graph operation
-						       (graph-output-nodes kron-operation-graph)))))
-      (otherwise (error "Entanglement operation got more than 2 input nodes, this shouldn't happen.")))))
+  (case (length input-nodes)
+    (1 (pipeline-to-graph (pipeline (stage input-nodes)
+				    (stage (make-computation-node operation))
+				    (stage (make-output-nodes operation input-nodes)))))
+    (2 (let ((kron-operation-graph (make-operation-graph (make-kronecker-operation :qubit-1 (ag-entanglement-qubit-1 operation)
+										   :qubit-2 (ag-entanglement-qubit-2 operation)) 
+							 input-nodes)))
+	 (merge-program-graphs kron-operation-graph
+			       (make-operation-graph operation
+						     (graph-output-nodes kron-operation-graph)))))
+    (otherwise (error "Entanglement operation got either zero or more
+than 2 input nodes, this shouldn't happen."))))
 
+(defmethod make-operation-graph (operation input-nodes)
+  (declare (type (or operation ag-operation operation)))
+  (pipeline-to-graph (pipeline (stage input-nodes)
+			       (stage (make-computation-node operation)) 
+			       (stage (make-output-nodes operation input-nodes)))))
+
+#|
 (defmethod make-operation-graph ((operation kronecker-operation) input-nodes)
   (pipeline-to-graph (pipeline (stage input-nodes)
 			       (stage (make-computation-node operation)) 
-			       (stage (make-output-node operation input-nodes)))))
+			       (stage (make-output-nodes operation input-nodes)))))
 
 (defmethod make-operation-graph ((operation ag-measurement) input-nodes)
-  )
+  (pipeline-to-graph (pipeline (stage input-nodes)
+			       (stage (make-computation-node operation))
+			       (stage (make-output-nodes operation input-nodes)))))
+|#
 
-(defmethod make-operation-graph ((operation ag-correction) input-nodes)
-  )
+(defgeneric make-output-nodes (operation input-nodes))
+(defmethod make-output-nodes ((operation ag-entanglement) input-nodes)
+  (let ((input-tangles (mapcar #'node-content input-nodes)))
+    (case (length input-nodes)
+      (1 (list (make-data-node (first input-tangles))))
+      (2 (list (make-data-node (merge-tangles (first input-tangles)
+					      (second input-tangles))))))))
+
+(defmethod make-output-nodes ((operation kronecker-operation) input-nodes)
+  (assert (= (length input-nodes) 2))
+  (list (make-data-node (merge-tangles (node-content (first input-nodes))
+				       (node-content (second input-nodes))))))
+
+(defmethod make-output-nodes ((operation ag-measurement) input-nodes)
+  ;We 'know' that find-input-nodes has put a node with a tangle first
+  ;and one with a signal-map second
+  (let ((input-tangle (node-content (first input-nodes)))
+	(input-signal-map (node-content (second input-nodes)))
+	(measured-qubit (ag-measurement-qubit operation)))
+    ;We return the new nodes in the same order
+    (list (make-data-node (make-tangle :qubits (remove measured-qubit
+						       (tangle-qubits input-tangle))))
+	  (make-data-node (make-signal-map :input-signals (signal-map-input-signals input-signal-map)
+					   :qubit-signals (remove measured-qubit
+								  (signal-map-qubit-signals input-signal-map)))))))
+
+(defmethod make-output-nodes ((operation ag-correction) input-nodes)
+    ;We 'know' that input-nodes has a tangle in the first position
+  (let ((input-tangle (node-content (first input-nodes))))
+    (list (make-data-node (make-tangle :qubits (tangle-qubits input-tangle))))))
 
 
 (defgeneric make-computation-node (operation))
@@ -418,6 +474,18 @@ get added in the wrong order?"))
 
 (defmethod make-computation-node ((operation kronecker-operation))
   (make-node :label (gensym "OP-Kron-")
+	     :content operation))
+
+(defmethod make-computation-node ((operation ag-measurement))
+  (make-node :label (gensym "OP-Measure-")
+	     :content operation))
+
+(defmethod make-computation-node ((operation ag-X-correction))
+  (make-node :label (gensym "OP-X-Correction-")
+	     :content operation))
+
+(defmethod make-computation-node ((operation ag-Z-correction))
+  (make-node :label (gensym "OP-Z-Correction-")
 	     :content operation))
 
 
@@ -430,32 +498,39 @@ get added in the wrong order?"))
   (make-node :label (gensym "Signals-")
 	     :content signals))
 
+;;; 3.4 FIND-INPUT-NODES
 
-(defgeneric make-output-node (operation input-nodes))
-(defmethod make-output-node ((operation ag-entanglement) input-nodes)
-  (let ((input-tangles (mapcar #'node-content input-nodes)))
-    (case (length input-nodes)
-      (1 (make-data-node (first input-tangles)))
-      (2 (make-data-node (merge-tangles (first input-tangles)
-					  (second input-tangles)))))))
-
-(defmethod make-output-node ((operation kronecker-operation) input-nodes)
-  (assert (= (length input-nodes) 2))
-  (make-data-node (merge-tangles (node-content (first input-nodes))
-				   (node-content (second input-nodes)))))
-
-
-;; Searching in Graph and Node contents
-
-(defgeneric find-input-nodes (operation program-graph))
+(defgeneric find-input-nodes (operation program-graph)
+  (:documentation "Returns the relevant input-nodes for a certain
+  operation (in abstract grammar form). Creates new nodes when
+  necessary"))
 (defmethod find-input-nodes ((operation ag-measurement) program-graph)
   "Returns a list with a tangle node and a signal node (in that
 order).  A new tangle or signal node is created when it cannot find
 either in the program graph."
-  (let ((tangle-node  (find-tangle-node program-graph (ag-measurement-qubit operation)))
+					; todo: emulate ag-correction's find-input-nodes signal-map-node handling
+  (let ((tangle-node (find-tangle-node program-graph (ag-measurement-qubit operation)))
 	(signal-map-node (find-signal-map-node program-graph
 					       (qubit-signal-dependencies operation)
 					       (input-signal-dependencies operation))))
+    (list (ensure-tangle-node tangle-node operation)
+	  (ensure-signal-map-node signal-map-node operation))))
+
+(defmethod find-input-nodes ((operation ag-correction) program-graph)
+  "Returns a list with a tangle node and (optionally) a signal node (in that
+order). A new tangle node is created when it cannot find it in the program graph."
+  (let ((tangle-node     (find-tangle-node program-graph (ag-correction-qubit operation)))
+	(signal-map-node (find-signal-map-node program-graph
+					       (qubit-signal-dependencies operation)
+					       (input-signal-dependencies operation))))
+    (if signal-map-node
+	(list (ensure-tangle-node tangle-node operation)
+	      signal-map-node)
+	(if (and (null (qubit-signal-dependencies operation))  ; if there are no dependencies
+		 (null (input-signal-dependencies operation))) ; we don't need a signal-map
+	    (list (ensure-tangle-node tangle-node operation))
+	    (error "There are qubit dependencies, but cannot find the required signal-map."))
+	)
     (list (ensure-tangle-node tangle-node operation)
 	  (ensure-signal-map-node signal-map-node operation))))
 
@@ -480,22 +555,7 @@ tangles or returns one existing tangle."
 		 (ensure-tangle-node tangle-node-2 operation)))
 	  (t (error "find-input-nodes failed to find or create the correct tangles")))))
 
-
-(defgeneric find-input-nodes (operation program-graph)
-  (:documentation "Returns the relevant input-nodes for a certain
-  operation (in abstract grammar form). Creates new nodes when
-  necessary"))
-
-(defun find-output-node (graph pred-func)
-  "Returns the first output node that returns true when applying the
-predicate to its _content_."
-  (declare (type graph graph))
-  (declare (type function pred-func))
-  (some #'(lambda (node)
-	    (let ((content (node-content node)))
-	      (when (funcall pred-func content)
-		node)))
-	(graph-output-nodes graph)))
+;;; 3.4 Searching in Graph and Node contents
 
 (defun find-tangle-node (graph qubit)
   (find-output-node graph 
@@ -505,26 +565,39 @@ predicate to its _content_."
 
 (defun find-signal-map-node (graph qubit-signal-dependencies input-signal-dependencies)
   "Returns a signal-map object that contains all the signal dependencies, nil otherwise."
+  (declare (ignore qubit-signal-dependencies input-signal-dependencies))
   (find-output-node graph
 		    #'(lambda (content)
 			(and (signal-map-p content)
-			     (subsetp qubit-signal-dependencies
-				      (signal-map-qubit-signals content))
-			     (subsetp input-signal-dependencies
-				      (signal-map-input-signals content))))))
+			     ;; TODO for now we are assuming all dependencies are met
+			     ;; (subsetp qubit-signal-dependencies
+			     ;; 	      (signal-map-qubit-signals content))
+			     ;; (subsetp input-signal-dependencies
+			     ;; 	      (signal-map-input-signals content))
+			     ))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;   COMPILER INTERFACE   ;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+
+
 (defun compile-to-graph (sequence)
+  "Applies COMPILE-OPERATION to each operation in the sequence,
+growing the program-graph."
   (loop for operation in sequence
      with program-graph = (make-empty-graph)
      do (setf program-graph (compile-operation operation program-graph))
      finally (return program-graph)))
 
 (defun compile-operation (operation program-graph)
+  "Applies MAKE-OPERATION-GRAPH to each operation in the sequence,
+merging the resulting graph with the existing
+program-graph. FIND-INPUT-NODES collects the data nodes relevant to
+the operation at hand and passes them to MAKE-OPERATION-GRAPH, this is
+to ensure the new operation graph has already made the relevant
+connections to the program graph."
   (let ((input-nodes (find-input-nodes operation program-graph)))
     (merge-program-graphs program-graph 
 			  (make-operation-graph operation input-nodes))))
@@ -545,6 +618,8 @@ predicate to its _content_."
       (ag-entanglement (format nil "Entangle (~A, ~A)"
 			       (ag-entanglement-qubit-1 content)
 			       (ag-entanglement-qubit-2 content)))
+      (ag-measurement (format nil "Measure ~A" 
+			      (ag-measurement-qubit content)))
       (kronecker-operation (format nil "Kronecker Product"))
       (otherwise (node-label node)))))
 
@@ -601,8 +676,8 @@ predicate to its _content_."
 	   :S-SIGNAL (make-AG-SIGNAL :FLAG NIL :LOOKUP-FLAGS NIL :QUBIT-FLAGS '(2)))))
 
 (defun test-op-graph ()
-  (make-operation-graph (make-ag-entanglement :qubit-1 2 :qubit-2 1) (list (make-data-node (make-tangle (list 2))) 
-									   (make-data-node (make-tangle (list 1 3))))))
+  (make-operation-graph (make-ag-entanglement :qubit-1 2 :qubit-2 1) (list (make-data-node (make-tangle :qubits (list 2))) 
+									   (make-data-node (make-tangle :qubits (list 1 3))))))
 
 
 (defun test-all ()
@@ -623,5 +698,7 @@ predicate to its _content_."
 ;(show-dot (compile-operation (make-ag-entanglement :qubit-1 1 :qubit-2 6) (compile-operation (make-ag-entanglement :qubit-1 5 :qubit-2 6) (test-op-graph))))
 
 ;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3)))))
+;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5))))))))
+;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (Z 6 (q 3))))))
 
 ;(test-all)

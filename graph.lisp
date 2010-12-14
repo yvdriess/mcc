@@ -1,9 +1,27 @@
 
 ;;;; File Organisation:
 ;;;; 1. Abstract Grammar
+;;;; 2. Parser
+;;;;  2.1 AG datastructs
+;;;;  2.2 parse operations
+;;;; 3. Graph Compiler
+;;;;  3.1 graph datastructs
+;;;;  3.2 compiler datastructs
+;;;;  3.3 make-operation-graph
+;;;;  3.4 find-input-nodes
+
+(defpackage :mc-graph-compiler
+  (:nicknames :mcc)
+  (:use :cl)
+  (:export compile-mc ))
 
 (eval-when (:compile-toplevel :load-toplevel)
  (declaim (optimize (speed 0) (debug 3) (safety 3))))
+
+(in-package :mcc)
+
+(defpackage :parsed-symbols
+  (:nicknames :parsed))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; 1.  ABSTRACT GRAMMAR    ;;;;
@@ -15,6 +33,8 @@
   "Allows the definition of symbol lists as constants without the compiler complaining"
   `(defconstant ,name (if (boundp ',name) (symbol-value ',name) ,value)
      ,@(when doc (list doc))))
+
+(defconstant +parse-package+ #.(find-package :mcc))
 
 (defconstant +entanglement-symbol+ 'E)
 (defconstant +measurement-symbol+  'M)
@@ -30,7 +50,6 @@
   `((pi/2  . ,(/ pi 2))
     (pi/4  . ,(/ pi 4))
     (pi/8  . ,(/ pi 8))
-;    (pi    . ,pi)
     (-pi   . ,(- pi))
     (-pi/2 . ,(- (/ pi 2)))
     (-pi/4 . ,(- (/ pi 4)))
@@ -46,7 +65,7 @@
        ',(loop for clause in +angle-constants+
 	    collect (cdr clause))
      (eval ,angle-expr)))
-              
+
 ;; number | built-in-angle | lisp-form
 (defun eval-angle (angle)
   (typecase angle
@@ -125,7 +144,7 @@
 
 (defun parse-operation (exp)
   (assert exp (exp) "Cannot parse empty expression")
-  (let ((operation-name (intern (symbol-name (car exp)))))
+  (let ((operation-name (intern (symbol-name (car exp)) +parse-package+)))
     (ecase operation-name
       (#.+entanglement-symbol+ (parse-entanglement exp))
       (#.+measurement-symbol+  (parse-measurement  exp))
@@ -152,7 +171,7 @@
 	   (s-signal (if (= (length args) 2)
 			 (parse-signal (second args))
 			 (make-default-ag-signal))))
-      (ecase (car exp)
+      (ecase (intern (symbol-name (car exp)) #.+parse-package+)
 	(#.+correction-X-symbol+ (make-ag-X-correction :qubit qubit 
 						       :s-signal s-signal))
 	(#.+correction-Z-symbol+ (make-ag-Z-correction :qubit qubit 
@@ -197,16 +216,19 @@ Syntax:  <identifier> | 0 | 1 | (q <qubit>) | (+ {<signal>}+ )"
   (let ((ag-signal (if ag-signal ag-signal (make-ag-signal))))
     (etypecase arg
       (bit (unless (zerop arg) (ag-signal-flip-flag ag-signal)))
-      (symbol (add-ag-signal-lookup arg ag-signal))
-      (list (cond ((and (eq (first arg) +signal-qubit-symbol+) ; (q <qubit>)
-			(= (length arg) 2))
-		   (add-ag-signal-dependency (parse-qubit (second arg))
-					     ag-signal))
-		  ((and (eq (first arg) +signal-sum-symbol+) ; (+ {<signal>}+)
-			(>= (length arg) 2))
-		   (loop for sub-expr in (rest arg)
-		      do (setf ag-signal (parse-signal sub-expr ag-signal))))
-		  (t (error "Cannot parse signal: ~A~%" arg)))))
+      (symbol (add-ag-signal-lookup (intern (symbol-name arg) +parse-package+)
+				    ag-signal))
+      (list (assert (symbolp (first arg)))
+	    (let ((operand (intern (symbol-name (first arg)) +parse-package+)))
+	      (cond ((and (eq operand +signal-qubit-symbol+) ; (q <qubit>)
+			  (= (length arg) 2))
+		     (add-ag-signal-dependency (parse-qubit (second arg))
+					       ag-signal))
+		    ((and (eq operand +signal-sum-symbol+) ; (+ {<signal>}+)
+			  (>= (length arg) 2))
+		     (loop for sub-expr in (rest arg)
+			do (setf ag-signal (parse-signal sub-expr ag-signal))))
+		    (t (error "Cannot parse signal: ~A~%" arg))))))
     ag-signal))
 
 (defun parse-qubit (arg)
@@ -251,31 +273,31 @@ Syntax:  <identifier> | 0 | 1 | (q <qubit>) | (+ {<signal>}+ )"
 				     (set-difference (graph-output-nodes graph-upstream)
 						     connected-nodes)))))
 
-(defgeneric connect (upstream downstream))
+;; (defgeneric connect (upstream downstream))
 
-(defmethod connect ((upstream node) (downstream node))
-  (pushnew downstream (node-downstream-nodes upstream))
-  (pushnew upstream (node-upstream-nodes downstream)))
+;; (defmethod connect ((upstream node) (downstream node))
+;;   (pushnew downstream (node-downstream-nodes upstream))
+;;   (pushnew upstream (node-upstream-nodes downstream)))
 
-(defmethod connect ((upstream graph) (downstream graph))
-  (setf (graph-output-nodes upstream)
-	(union (graph-output-nodes upstream)
-	       (graph-input-nodes downstream)))
-  (setf (graph-input-nodes downstream) 
-	(union (graph-input-nodes downstream) 
-	       (graph-output-nodes upstream))))
+;; (defmethod connect ((upstream graph) (downstream graph))
+;;   (setf (graph-output-nodes upstream)
+;; 	(union (graph-output-nodes upstream)
+;; 	       (graph-input-nodes downstream)))
+;;   (setf (graph-input-nodes downstream) 
+;; 	(union (graph-input-nodes downstream) 
+;; 	       (graph-output-nodes upstream))))
 
-(defmethod connect ((upstream node) (downstream graph))
-  (setf (node-downstream-nodes upstream) 
-	(union (node-downstream-nodes upstream) 
-	       (graph-input-nodes downstream)))
-  (pushnew upstream (graph-input-nodes downstream)))
+;; (defmethod connect ((upstream node) (downstream graph))
+;;   (setf (node-downstream-nodes upstream) 
+;; 	(union (node-downstream-nodes upstream) 
+;; 	       (graph-input-nodes downstream)))
+;;   (pushnew upstream (graph-input-nodes downstream)))
 
-(defmethod connect ((upstream graph) (downstream node))
-  (pushnew downstream (graph-output-nodes upstream))
-  (setf (node-upstream-nodes downstream)
-	(union (node-upstream-nodes downstream)
-	       (graph-output-nodes upstream))))
+;; (defmethod connect ((upstream graph) (downstream node))
+;;   (pushnew downstream (graph-output-nodes upstream))
+;;   (setf (node-upstream-nodes downstream)
+;; 	(union (node-upstream-nodes downstream)
+;; 	       (graph-output-nodes upstream))))
 
 
 (defun stage (obj)
@@ -293,8 +315,7 @@ Syntax:  <identifier> | 0 | 1 | (q <qubit>) | (+ {<signal>}+ )"
 (defun pipeline-connect (pipeline-stages)
   "Destructively connects all nodes from one stage (a list of nodes)
 with the other. (A B) (C D) becomes A->C A->D B->C B->D Recursively
-doing the same with the other stages. Existing connections are
-overwritten."
+doing the same with the other stages."
   (when pipeline-stages
     (let ((upstream-stage (first pipeline-stages)) 
 	  (downstream-pipeline-stages (rest pipeline-stages)))
@@ -302,9 +323,13 @@ overwritten."
       (when downstream-pipeline-stages
 	(let ((downstream-stage (first downstream-pipeline-stages)))
 	  (loop for node in upstream-stage
-	     do (setf (node-downstream-nodes node) downstream-stage))
+	     do (setf (node-downstream-nodes node)
+		      (union (node-downstream-nodes node)
+			     downstream-stage)))
 	  (loop for node in downstream-stage
-	     do (setf (node-upstream-nodes node) upstream-stage))
+	     do (setf (node-upstream-nodes node) 
+		      (union (node-upstream-nodes node) 
+			     upstream-stage)))
 	  (pipeline-connect downstream-pipeline-stages))))))
 
 (defun pipeline-to-graph (pipeline-stages)
@@ -402,7 +427,15 @@ get added in the wrong order?"))
 
 ;;; 3.3 MAKE-OPERATION-GRAPH
 
-(defgeneric make-operation-graph (operation input-nodes))
+(defgeneric make-operation-graph (operation input-nodes)
+  (:documentation "Returns a program graph with operation and data
+nodes representing the given (ag-)operation."))
+(defmethod make-operation-graph (operation input-nodes)
+  (declare (type (or operation ag-operation operation)))
+  (pipeline-to-graph (pipeline (stage input-nodes)
+			       (stage (make-computation-node operation)) 
+			       (stage (make-output-nodes operation input-nodes)))))
+
 (defmethod make-operation-graph ((operation ag-entanglement) input-nodes)
   (case (length input-nodes)
     (1 (pipeline-to-graph (pipeline (stage input-nodes)
@@ -417,23 +450,14 @@ get added in the wrong order?"))
     (otherwise (error "Entanglement operation got either zero or more
 than 2 input nodes, this shouldn't happen."))))
 
-(defmethod make-operation-graph (operation input-nodes)
-  (declare (type (or operation ag-operation operation)))
-  (pipeline-to-graph (pipeline (stage input-nodes)
-			       (stage (make-computation-node operation)) 
-			       (stage (make-output-nodes operation input-nodes)))))
+(defmethod make-operation-graph ((operation ag-correction) input-nodes)
+  "If a signal-map-node was passed as input (second node) then it is
+added to the list of output nodes on the graph, because corrections do not modify signal maps."
+  (let ((operation-graph (call-next-method)))
+    (when (>= (length input-nodes) 2)      
+      (pushnew (second input-nodes) (graph-output-nodes operation-graph)))
+    operation-graph))
 
-#|
-(defmethod make-operation-graph ((operation kronecker-operation) input-nodes)
-  (pipeline-to-graph (pipeline (stage input-nodes)
-			       (stage (make-computation-node operation)) 
-			       (stage (make-output-nodes operation input-nodes)))))
-
-(defmethod make-operation-graph ((operation ag-measurement) input-nodes)
-  (pipeline-to-graph (pipeline (stage input-nodes)
-			       (stage (make-computation-node operation))
-			       (stage (make-output-nodes operation input-nodes)))))
-|#
 
 (defgeneric make-output-nodes (operation input-nodes))
 (defmethod make-output-nodes ((operation ag-entanglement) input-nodes)
@@ -519,20 +543,17 @@ either in the program graph."
 (defmethod find-input-nodes ((operation ag-correction) program-graph)
   "Returns a list with a tangle node and (optionally) a signal node (in that
 order). A new tangle node is created when it cannot find it in the program graph."
-  (let ((tangle-node     (find-tangle-node program-graph (ag-correction-qubit operation)))
-	(signal-map-node (find-signal-map-node program-graph
-					       (qubit-signal-dependencies operation)
-					       (input-signal-dependencies operation))))
-    (if signal-map-node
-	(list (ensure-tangle-node tangle-node operation)
-	      signal-map-node)
-	(if (and (null (qubit-signal-dependencies operation))  ; if there are no dependencies
-		 (null (input-signal-dependencies operation))) ; we don't need a signal-map
-	    (list (ensure-tangle-node tangle-node operation))
-	    (error "There are qubit dependencies, but cannot find the required signal-map."))
-	)
-    (list (ensure-tangle-node tangle-node operation)
-	  (ensure-signal-map-node signal-map-node operation))))
+  (let ((tangle-node (find-tangle-node program-graph (ag-correction-qubit operation)))
+	(qubit-dep (qubit-signal-dependencies operation))
+	(input-dep (input-signal-dependencies operation)))
+    (cons (ensure-tangle-node tangle-node operation)
+	  (if (or qubit-dep input-dep)
+	      (let ((signal-map-node (find-signal-map-node program-graph 
+							   qubit-dep
+							   input-dep)))
+		(if signal-map-node
+		    (list signal-map-node)
+		    (error "There are qubit dependencies, but cannot find the required signal-map.")))))))
 
 (defmethod find-input-nodes ((operation ag-entanglement) program-graph)
   "Returns one or two tangles. Either it finds no relevant tangles in the program-graph and creates two new tangles,
@@ -582,6 +603,10 @@ tangles or returns one existing tangle."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
+(defun compile-mc (mc-sequence)
+  "Takes valid a QVM program (a MC operation sequence) and compiles it
+to a program graph"
+  (compile-to-graph (parse-sequence mc-sequence)))
 
 (defun compile-to-graph (sequence)
   "Applies COMPILE-OPERATION to each operation in the sequence,
@@ -620,6 +645,8 @@ connections to the program graph."
 			       (ag-entanglement-qubit-2 content)))
       (ag-measurement (format nil "Measure ~A" 
 			      (ag-measurement-qubit content)))
+      (ag-X-correction (format nil "X ~A" (ag-correction-qubit content)))
+      (ag-Z-correction (format nil "Z ~A" (ag-correction-qubit content)))
       (kronecker-operation (format nil "Kronecker Product"))
       (otherwise (node-label node)))))
 
@@ -699,6 +726,28 @@ connections to the program graph."
 
 ;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3)))))
 ;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5))))))))
-;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (Z 6 (q 3))))))
-
+;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (X 4 )))))
+;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (Z 6 (q 3)) (X 4) ))))
+;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (Z 6 (q 3)) (X 4) (X 2 (q 1))))))
 ;(test-all)
+
+;; Real MC program, produces 3 W-entangled qubits
+(defvar *w3-program*
+  (reverse 
+   `((X 18 (+ 1 (q 1) (q 3) (q 5) (q 7) (q 11) (q 13) (q 15) (q 17)))
+     (Z 18 (+ 1 (q 8) (q 14) (q 15) (q 16)))
+     (X 10 (+ (q 9) (q 11) (q 13) (q 15) (q 17)))
+     (Z 10 (+ 1 (q 8) (q 11) (q 12)))
+     (X 6  (+ (q 1) (q 3) (q 5)))
+     (Z 6  (+ 1 (q 2) (q 3) (q 4)))
+     (M 17 0) (M 16 pi/2) (M 15 pi/4 (q 14)) (M 14 pi/2) (M 13 0)
+     (M 12 pi/2) (M 11 -pi/4)
+     (M 9 0) (M 8 0) (M 7 0) (M 5 0)
+     (M 4 pi/2) (M 3 (acos (sqrt (/ 2 3))) (+ (q 1) (q 2))) (M 2 pi/2) (M 1 0)
+     ,@(loop for i from 10 above 1 collect `(E ,(1- i) ,i))
+     ,@(loop for i from 18 above 11 collect `(E ,(1- i) ,i))        
+     (E 8 13) (E 9 18))))
+
+;(time (compile-mc *w3-program*))
+
+(show-dot (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1)))))

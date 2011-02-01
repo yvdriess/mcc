@@ -10,9 +10,14 @@
 ;;;;  3.3 make-operation-graph
 ;;;;  3.4 find-input-nodes
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (ql:quickload 'alexandria)
+  (declaim (optimize (speed 0) (debug 3) (safety 3))))
+
 (defpackage :mc-graph-compiler
   (:nicknames :mcc)
   (:use :cl)
+  (:import-from alexandria with-gensyms if-let compose)
   (:export compile-mc ))
 
 (eval-when (:compile-toplevel :load-toplevel)
@@ -22,6 +27,15 @@
 
 (defpackage :parsed-symbols
   (:nicknames :parsed))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  ;; these get used at macro-expand time
+  (defun symbol-to-string (sym)
+    (string-downcase (symbol-name sym)))
+  (defun symbol-list-to-string (symlist)
+    (mapcar #'symbol-to-string symlist))
+  (defvar *debug* T))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; 1.  ABSTRACT GRAMMAR    ;;;;
@@ -35,7 +49,6 @@
      ,@(when doc (list doc))))
 
 (defconstant +parse-package+ #.(find-package :mcc))
-
 (defconstant +entanglement-symbol+ 'E)
 (defconstant +measurement-symbol+  'M)
 (defconstant +correction-X-symbol+ 'X)
@@ -273,6 +286,18 @@ Syntax:  <identifier> | 0 | 1 | (q <qubit>) | (+ {<signal>}+ )"
 				     (set-difference (graph-output-nodes graph-upstream)
 						     connected-nodes)))))
 
+(defun input-node-p (node graph)
+  (member node (graph-input-nodes graph) :test #'equal))
+(defun output-node-p (node graph)
+  (member node (graph-output-nodes graph) :test #'equal))
+
+(defun add-input-node (node graph)
+  (pushnew node (graph-input-nodes graph)))
+(defun add-output-node (node graph)
+  (pushnew node (graph-output-nodes graph)))
+(defun add-node (node graph)
+  (pushnew node (graph-nodes graph)))
+
 ;; (defgeneric connect (upstream downstream))
 
 ;; (defmethod connect ((upstream node) (downstream node))
@@ -361,14 +386,24 @@ predicate to its _content_."
 
 (defun merge-tangles (tangle-1 tangle-2)
   "Returns a new tangle containing the qubits of both tangles, in order."
-  (make-tangle :qubits (union (tangle-qubits tangle-1)
+  #+*debug*(assert (null (intersection (tangle-qubits tangle-1)
 			      (tangle-qubits tangle-2))))
+  (make-tangle :qubits (append (tangle-qubits tangle-1)
+			       (tangle-qubits tangle-2))))
 
 (defun find-qubit (tangle qubit)
-  "Returns nil if the qubit could not be found in the tangle, non-nil otherwise"
+  "Returns nil if the qubit could not be found in the tangle, non-nil otherwise."
   (declare (type tangle tangle))
   (declare (type #.+qubit-id-type+ qubit))
   (find qubit (tangle-qubits tangle)))
+
+(defun qubit-tensor-index (qubit tangle)
+  "Returns the tensor-index (power of two) of the given qubit in a tangle."
+  (let ((tangle-position (position qubit (tangle-qubits tangle))))
+    (if tangle-position
+	(expt 2 tangle-position)
+	(error "Could not find Qubit ~A in Tangle ~A~%" qubit tangle))))
+
 
 ;;; 3.2.2 Signal Map
 
@@ -571,9 +606,15 @@ tangles or returns one existing tangle."
 	       (list tangle-node-1 tangle-node-2))) ; both different
 	  ((equal tangle-node-1 tangle-node-2)	    ; both nil
 	   (list (make-data-node (make-tangle :qubits (qubit-dependencies operation)))))
-	  ((or tangle-node-1 tangle-node-2)  ; one is nil
-	   (list (ensure-tangle-node tangle-node-1 operation)
-		 (ensure-tangle-node tangle-node-2 operation)))
+	  (tangle-node-1		; only tangle-node-2 is nil
+	   (list tangle-node-1
+		 (make-data-node (make-tangle :qubits (list (ag-entanglement-qubit-2 operation))))))
+	  (tangle-node-2		; only tangle-node-1 is nil
+	   (list (make-data-node (make-tangle :qubits (list (ag-entanglement-qubit-1 operation))))
+		 tangle-node-2))
+	  ;; ((or tangle-node-1 tangle-node-2)  ; one is nil
+	  ;;  (list (ensure-tangle-node tangle-node-1 operation)
+	  ;; 	 (ensure-tangle-node tangle-node-2 operation)))
 	  (t (error "find-input-nodes failed to find or create the correct tangles")))))
 
 ;;; 3.4 Searching in Graph and Node contents
@@ -723,7 +764,7 @@ connections to the program graph."
 
 ;(compile-operation (make-ag-entanglement :qubit-1 2 :qubit-2 1) (make-empty-graph))
 ;(show-dot (compile-operation (make-ag-entanglement :qubit-1 1 :qubit-2 6) (compile-operation (make-ag-entanglement :qubit-1 5 :qubit-2 6) (test-op-graph))))
-
+;(show-dot (compile-to-graph (parse-sequence '((E 0 1) (E 1 2) (M 1 0) (X 2 (q 1))))))
 ;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3)))))
 ;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5))))))))
 ;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (X 4 )))))
@@ -748,6 +789,777 @@ connections to the program graph."
      ,@(loop for i from 18 above 11 collect `(E ,(1- i) ,i))        
      (E 8 13) (E 9 18))))
 
-;(time (compile-mc *w3-program*))
+(defvar *short-w3-program*
+  (reverse 
+   `(     (M 17 0) (M 16 pi/2) (M 15 pi/4 (q 14)) (M 14 pi/2) (M 13 0)
+     (M 12 pi/2) (M 11 -pi/4)
+     (M 9 0) (M 8 0) (M 7 0) (M 5 0)
+     (M 4 pi/2) (M 3 (acos (sqrt (/ 2 3))) (+ (q 1) (q 2))) (M 2 pi/2) (M 1 0)
+     ,@(loop for i from 10 above 1 collect `(E ,(1- i) ,i))
+     ,@(loop for i from 18 above 11 collect `(E ,(1- i) ,i))        
+     (E 8 13) (E 9 18))))
 
-(show-dot (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1)))))
+;(show-dot (compile-mc *w3-program*))
+
+;(show-dot (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1)))))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;   MC GRAPH TO CNC GRAPH   ;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+
+
+(defun mc-graph-to-cnc-graph (mc-graph)
+  (let ((cnc-graph (make-graph))
+	(swap-table (make-hash-table)))
+    ;;  first pass: copy each node, ignore edges
+    (loop
+       for node in (graph-nodes mc-graph)
+       for new-node = (expand-to-cnc-node node)
+       do (progn 
+	    (setf (gethash node swap-table) new-node)
+	    (add-node new-node cnc-graph))
+       when (input-node-p node mc-graph)
+        do (add-input-node new-node cnc-graph)
+       when (output-node-p node mc-graph)
+        do (add-output-node new-node cnc-graph))
+    ;;  second pass: swap the edges
+    (loop for node in (graph-nodes cnc-graph)
+       do (setf (node-upstream-nodes node) 
+		(swap-nodes (node-upstream-nodes node) swap-table))
+       do (setf (node-downstream-nodes node) 
+		(swap-nodes (node-downstream-nodes node) swap-table)))
+    ;;  third pass: instantiate the content (uses info from edges)
+    (loop
+       for node in (graph-nodes cnc-graph)
+	 do (instantiate-node-content (node-content node) node cnc-graph))
+    cnc-graph
+    ))
+
+(defun swap-nodes (node-list swap-table)
+  (loop for node in node-list
+       collecting (if-let ((swapped (gethash node swap-table)))
+		    swapped
+		    node)))
+
+(defgeneric expand-to-cnc-node (node))
+
+(defmethod expand-to-cnc-node ((node node))
+  (let ((new-node (make-node :content (change-node-content (node-content node))
+			     :upstream-nodes (node-upstream-nodes node)
+			     :downstream-nodes (node-downstream-nodes node))))
+    new-node))
+
+;(pprint (mc-graph-to-cnc-graph (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1))))))
+
+
+(defstruct cnc-tangle
+  tangle
+  size
+  item-collection
+  tag-collection)
+
+(defstruct (cnc-input-tangle (:include cnc-tangle))
+  generator-tag-collection
+  step-kernel)
+
+(defstruct (cnc-output-tangle (:include cnc-tangle))
+  step-kernel)
+
+(defstruct cnc-signal
+  item-collection)
+
+(defstruct cnc-operation
+  input-item-collection
+  output-item-collection
+  input-tag-collection
+  output-tag-collection
+  signal-item-collection
+  step-kernel
+  qubit
+  qubit-index
+  size
+  tuner-name
+  tuner-args)
+
+(defstruct (cnc-entanglement-operation (:include cnc-operation))
+  qubit-2
+  qubit-2-index
+  )
+
+(defstruct (cnc-kronecker-operation (:include cnc-operation))
+  size-2
+  input2-item-collection
+  input2-tag-collection)
+
+(defstruct (cnc-measurement-operation (:include cnc-operation))
+  angle
+  s-signal
+  t-signal
+  check-step-kernel
+  do-m-tag-collection
+  )
+
+(defstruct (cnc-correction-operation (:include cnc-operation))
+  signal
+)
+
+(defstruct item-collection
+  name
+  (type "amplitude"
+	:type string))
+
+(defstruct tag-collection
+  (name (symbol-to-string (gensym "tag_")) :type string)
+  (type "unsigned int" 
+	:type string))
+
+;; ;;;; CNC-OPERATION-STEPS
+
+;; (defgeneric cnc-operation-steps (obj))
+;; (defmethod cnc-operation-steps ((obj cnc-operation))
+;;   (list (cnc-operation-step-kernel obj)))
+;; (defmethod cnc-operation-steps ((obj cnc-measurement-operation))
+;;   (list (cnc-operation-step-kernel obj)
+;; 	(cnc-measurement-operation-check-step-kernel obj)))
+
+
+
+;; ;;;; CNC-OPERATION-TAGS
+;; (defgeneric cnc-operation-tags (obj))
+;; (defmethod cnc-operation-tags ((obj cnc-operation)))
+;; (defmethod cnc-operation-tags ((obj cnc-measurement-operation))
+;;   (list (cnc-measurement-operation-do-m-tag-collection obj)))
+
+;;;; CNC-NODE-PRESCRIPTIONS
+(defgeneric cnc-node-prescriptions (content node))
+(defmethod cnc-node-prescriptions (obj node))
+(defmethod cnc-node-prescriptions ((obj cnc-input-tangle) node)
+  (list (cons (cnc-input-tangle-step-kernel obj)
+	      (cnc-input-tangle-generator-tag-collection obj))))
+(defmethod cnc-node-prescriptions ((obj cnc-output-tangle) node)
+  (list (cons (cnc-output-tangle-step-kernel obj)
+	      (cnc-output-tangle-tag-collection obj))))
+(defmethod cnc-node-prescriptions ((obj cnc-operation) node)
+  (list (cons (cnc-operation-step-kernel obj)
+	      (cnc-operation-input-tag-collection obj))))
+(defmethod cnc-node-prescriptions ((obj cnc-measurement-operation) node)
+  (list (cons (cnc-measurement-operation-check-step-kernel obj)
+	      (cnc-measurement-operation-input-tag-collection obj))
+	(cons (cnc-measurement-operation-step-kernel obj)
+	      (cnc-measurement-operation-do-m-tag-collection obj))))
+
+(defun make-tangle-name-pair () 
+  ;; I want both names to use the same number
+  (prog1 (cons (concatenate 'string "tangle_" (number-to-string *gensym-counter*))
+	       (concatenate 'string "do_on_tangle_" (number-to-string *gensym-counter*)))
+    (incf *gensym-counter*)))
+
+(defun get-cnc-tangle (nodes)
+  (if-let ((node (find-if #'cnc-tangle-p nodes
+			  :key #'node-content)))
+    (node-content node)))
+
+(defun get-cnc-tangles (nodes)
+  (if-let ((node-list (remove-if-not #'cnc-tangle-p (mapcar #'node-content nodes))))
+    node-list))
+
+(defun get-cnc-signals (nodes)
+  (if-let ((node (find-if #'cnc-signal-p nodes
+			  :key #'node-content)))
+    (node-content node)))
+
+;;;; CHANGE-NODE-CONTENT
+
+(defgeneric change-node-content (obj))
+
+(defmethod change-node-content ((tangle tangle))
+  (let ((tangle-name-pair (make-tangle-name-pair)))
+    (make-cnc-tangle :tangle tangle
+		     :size (expt 2 (length (tangle-qubits tangle)))
+		     :item-collection (make-item-collection :name (car tangle-name-pair))
+		     :tag-collection (make-tag-collection :name (cdr tangle-name-pair)))))
+
+(let ((the-cnc-signal (make-cnc-signal :item-collection (make-item-collection :name "signals"
+									      :type "bool"))))
+  (defmethod change-node-content ((signals signal-map))
+    the-cnc-signal))
+
+(defmethod change-node-content ((operation ag-entanglement))
+  (make-cnc-entanglement-operation :qubit (ag-entanglement-qubit-1 operation)
+				   :step-kernel  (get 'E 'kernel)
+				   :qubit-2 (ag-entanglement-qubit-2 operation)))
+
+(defmethod change-node-content ((operation kronecker-operation))
+  (make-cnc-kronecker-operation :step-kernel (get 'kron 'kernel)))
+
+(defmethod change-node-content ((operation ag-measurement))
+  (make-cnc-measurement-operation :qubit (ag-measurement-qubit operation)
+				  :angle (ag-measurement-angle operation)
+				  :s-signal (ag-measurement-s-signal operation)
+				  :t-signal (ag-measurement-t-signal operation)
+				  :check-step-kernel (get 'check_M 'kernel)
+				  :step-kernel (get 'M 'kernel)
+				  :do-m-tag-collection (make-tag-collection :name (symbol-to-string (gensym "do_m_")))))
+
+(defmethod change-node-content ((operation ag-X-correction))
+  (make-cnc-correction-operation :qubit (ag-correction-qubit operation)
+				 :signal (ag-correction-s-signal operation)
+				 :step-kernel (get 'X 'kernel)))
+
+(defmethod change-node-content ((operation ag-Z-correction))
+  (make-cnc-correction-operation :qubit (ag-correction-qubit operation)
+				 :signal (ag-correction-s-signal operation)
+				 :step-kernel (get 'Z 'kernel)))
+
+
+;;;; INSTANTIATE-NODE-CONTENT: second pass, fills in the dependent data (e.g. names of input and output nodes)
+
+(defgeneric instantiate-node-content (cnc-obj node cnc-graph))
+
+(defmethod instantiate-node-content :before ((operation cnc-operation) node cnc-graph)
+  (let ((input-cnc-tangle  (get-cnc-tangle (node-upstream-nodes node)))
+	(output-cnc-tangle (get-cnc-tangle (node-downstream-nodes node)))
+	(signals           (get-cnc-signals (node-upstream-nodes node))))
+    (with-slots (input-item-collection
+		 output-item-collection
+		 input-tag-collection
+		 output-tag-collection
+		 signal-item-collection
+		 step-kernel
+		 qubit
+		 qubit-index
+		 size)
+	operation
+      (assert input-cnc-tangle) (assert output-cnc-tangle) ;signals can be empty
+      (setf qubit-index (when qubit (qubit-tensor-index qubit (cnc-tangle-tangle input-cnc-tangle)))
+            input-item-collection (cnc-tangle-item-collection input-cnc-tangle)
+	    input-tag-collection (cnc-tangle-tag-collection input-cnc-tangle)
+	    output-item-collection (cnc-tangle-item-collection output-cnc-tangle)
+	    output-tag-collection (cnc-tangle-tag-collection output-cnc-tangle)
+	    signal-item-collection (when signals (cnc-signal-item-collection signals))
+	    size (cnc-tangle-size input-cnc-tangle)))))
+
+;;; stub, non-operation nodes do nothing
+(defmethod instantiate-node-content (content node cnc-graph))
+
+(defmethod instantiate-node-content ((operation cnc-operation) node cnc-graph)
+  (with-slots (step-kernel input-item-collection output-item-collection output-tag-collection signal-item-collection qubit-index size)
+      operation
+    (setf step-kernel
+	  (apply-kernel step-kernel
+					; input: tangle
+			(list (item-collection-name input-item-collection))  
+					; output: tangle, tag
+			(list (item-collection-name output-item-collection) 
+			      (tag-collection-name output-tag-collection))
+					; params: size qid
+			(mapcar #'number-to-string (list size qubit-index))))))
+
+(defmethod instantiate-node-content ((operation cnc-entanglement-operation) node cnc-graph)
+  (with-slots (step-kernel input-item-collection output-item-collection output-tag-collection 
+	       signal-item-collection  size qubit-2 qubit-index qubit-2-index 
+	       tuner-name tuner-args)
+      operation
+    (setf qubit-2-index (qubit-tensor-index qubit-2 (cnc-tangle-tangle (get-cnc-tangle (node-upstream-nodes node)))))
+    (let* ((qi-1 (max qubit-index qubit-2-index))
+	   (qi-2 (min qubit-index qubit-2-index))
+	   (params (mapcar #'number-to-string (list size qi-1 qi-2))))
+      (setf step-kernel (apply-kernel step-kernel
+					; input: tangle
+				      (list (item-collection-name input-item-collection))
+					; output: tangle, tag
+				      (list (item-collection-name output-item-collection) 
+					    (tag-collection-name output-tag-collection))
+					; params: size qid qid-2
+				      params)
+	    tuner-name "e_tuner"
+	    tuner-args (append params (list (item-collection-name input-item-collection)))))))
+
+(defmethod instantiate-node-content ((operation cnc-kronecker-operation) node cnc-graph)
+  (with-slots (step-kernel input-item-collection input-tag-collection
+			   input2-item-collection input2-tag-collection 
+			   output-item-collection output-tag-collection 
+			   size size-2
+			   tuner-name tuner-args)
+      operation
+    (assert (= (list-length (get-cnc-tangles (node-upstream-nodes node)))
+	       2))
+    (let ((cnc-tangle-2 (second (get-cnc-tangles (node-upstream-nodes node)))))
+      (setf input2-item-collection (cnc-tangle-item-collection cnc-tangle-2)
+	    input2-tag-collection  (cnc-tangle-tag-collection cnc-tangle-2)
+	    size-2 (cnc-tangle-size cnc-tangle-2))
+      ;; (when (> size-2 size)
+      ;; 	;; swap out tangle-1 and tangle-2 such that tangle-1 becomes the largest
+      ;; 	;; ... dirty dirty hack to limit the number of suspended item
+      ;; 	(rotatef input2-tag-collection input-tag-collection)
+      ;; 	(rotatef input2-item-collection input-item-collection)
+      ;; 	(rotatef size-2 size))
+      (setf step-kernel (apply-kernel step-kernel
+					;  (tangle-1 tangle-2) (tangle-out tag-out) (size-2)
+				      (list (item-collection-name input-item-collection)
+					    (item-collection-name input2-item-collection))
+				      (list (item-collection-name output-item-collection)
+					    (tag-collection-name  output-tag-collection))
+				      (mapcar #'number-to-string (list size-2)))
+	    tuner-name "kron_tuner"
+	    tuner-args (list (number-to-string size-2)
+			     (item-collection-name input2-item-collection))))))
+
+(defmethod instantiate-node-content ((operation cnc-measurement-operation) node cnc-graph)
+  ;; the operation step kernel performs the M operation, but there is a second step 'check-M' that needs to be introduced
+  (with-slots (check-step-kernel step-kernel input-item-collection output-item-collection output-tag-collection 
+	       signal-item-collection qubit-index size do-m-tag-collection)
+      operation
+    (setf check-step-kernel
+					; (in_tangle signals) 
+					; (do_m_tags out_tangle out_tags signals) 
+					; (qid)
+	  (apply-kernel check-step-kernel
+					; input: tangle,signals
+			(list (item-collection-name input-item-collection)
+			      (item-collection-name signal-item-collection))
+					; output: tag, tangle, tag, signals
+			(list (tag-collection-name do-m-tag-collection)
+			      (item-collection-name output-item-collection)
+			      (tag-collection-name output-tag-collection)
+			      (item-collection-name signal-item-collection))
+					; params: qid
+			(mapcar #'number-to-string (list qubit-index))))    
+    ;; this will apply the M operation kernel
+    ;;   (in_tangle) (out_tangle out_tags) (size qid)
+    (setf step-kernel
+	  (apply-kernel step-kernel
+					; input: tangle
+			(list (item-collection-name input-item-collection))  
+					; output: tangle, tag
+			(list (item-collection-name output-item-collection) 
+			      (tag-collection-name output-tag-collection))
+					; params: size qid
+			(mapcar #'number-to-string (list size qubit-index))))))
+
+(defmethod instantiate-node-content ((cnc-tangle cnc-tangle) node cnc-graph)
+  ;; if tangle is an input or output node, add a cnc-step to it
+  (cond ((input-node-p node cnc-graph)
+	 (setf (node-content node)
+	       (make-io-cnc-tangle cnc-tangle :input)))
+	((output-node-p node cnc-graph)
+	 (setf (node-content node)
+	       (make-io-cnc-tangle cnc-tangle :output)))))
+
+;;;; MAKE-IO-CNC-TANGLE
+
+(defgeneric make-io-cnc-tangle (tangle direction))
+
+(defmethod make-io-cnc-tangle (cnc-tangle (direction (eql :input)))
+  (with-slots (tangle
+	       size
+	       item-collection
+	       tag-collection)
+      cnc-tangle
+    (make-cnc-input-tangle :tangle tangle
+			   :size size
+			   :item-collection item-collection
+			   :tag-collection tag-collection
+			   :generator-tag-collection (make-tag-collection :name (symbol-name (gensym "do_generate_")))
+			   :step-kernel (apply-kernel (get 'gen_tangle 'kernel)
+						      () 
+						      (list (item-collection-name item-collection)
+							    (tag-collection-name tag-collection))
+						      (list (number-to-string size))))))
+
+(defmethod make-io-cnc-tangle (cnc-tangle (direction (eql :output)))
+  (with-slots (tangle
+	       size
+	       item-collection
+	       tag-collection)
+      cnc-tangle
+    (make-cnc-output-tangle :tangle tangle
+			    :size size
+			    :item-collection item-collection
+			    :tag-collection tag-collection
+			    :step-kernel (apply-kernel (get 'output_tangle 'kernel)
+						       (list (item-collection-name item-collection))
+						       ()
+						       (list (number-to-string size))))))
+
+;; (defun make-tensoring-entanglement-operation (cnc-entanglement-operation input-cnc-tangles)
+;;   (with-slots (input-item-collection output-item-collection input-tag-collection output-tag-collection step-kernel size qubit qubit-2)
+;;       cnc-entanglement-operation
+;;     (let* ((input-tangle-2         (first (remove input-item-collection input-cnc-tangles
+;; 						  :key #'cnc-tangle-item-collection)))
+;; 	   (input2-item-collection (cnc-tangle-item-collection input-tangle-2))
+;; 	   (input2-tag-collection  (cnc-tangle-tag-collection input-tangle-2))
+;; 	   (size-2                 (cnc-tangle-size input-tangle-2))
+;; 	   (tensor-step-kernel     (get 'kronecker    'kernel))
+;; 	   (tensor-tag-collection  (make-tag-collection :name (symbol-to-string (gensym "tag-cross-pairs")) 
+;; 							:tag-type "std::pair<unsigned int,unsigned int>"))
+;; 	   (tensor-item-collection (make-item-collection :name (symbol-to-string (gensym "tensored_")))))
+;;       (make-cnc-tensoring-entanglement-operation :input-item-collection  input-item-collection
+;; 						 :output-item-collection output-item-collection
+;; 						 :input-tag-collection   input-tag-collection
+;; 						 :output-tag-collection  output-tag-collection
+;; 						 :step-kernel            step-kernel
+;; 						 :qubit                  qubit
+;; 						 :size                   size
+;; 						 :size-2                 size-2
+;; 						 :qubit-2                qubit-2
+;; 						 :input2-item-collection input2-item-collection
+;; 						 :input2-tag-collection  input2-tag-collection
+;; 						 :tensor-tag-collection  tensor-tag-collection
+;; 						 :tensor-item-collection tensor-item-collection
+;; 						 :tensor-step-kernel     tensor-step-kernel))))
+
+(defun construct-cnc-program-from-graph (cnc-graph)
+  (loop
+     for node in (graph-nodes cnc-graph)
+     for node-content = (node-content node)
+     for node-prescriptions = (cnc-node-prescriptions node-content node)
+     appending node-prescriptions into prescriptions
+ ;; currently adding a single [int signals <bool>] collection in the
+    ;; generator itself when (cnc-operation-p (node-content node)) do
+    ;; (pushnew (cnc-operation-signal-item-collection (node-content
+    ;; node)) items)
+    
+     when (cnc-tangle-p node-content)
+       collect (cnc-tangle-item-collection node-content) 
+         into items
+     when (cnc-input-tangle-p node-content)
+       collect (cnc-input-tangle-generator-tag-collection node-content)
+         into generator-tag-collections
+     when (cnc-kronecker-operation-p node-content)
+       collect (tag-collection-name (cnc-kronecker-operation-input2-tag-collection node-content))
+         into dangling-tag-names
+     ;; adding tuners
+     when (and (cnc-operation-p node-content)
+	       (cnc-operation-tuner-name node-content))
+     collect (cons (symbol-name (cnc-step-name (cnc-operation-step-kernel node-content)))
+		   (cons  (cnc-operation-tuner-name node-content)
+			  (cnc-operation-tuner-args node-content)))
+       into tuned-steps
+     finally
+       (let* ((steps       (mapcar #'car prescriptions))
+	      (tag-names   (mapcar (compose #'tag-collection-name #'cdr) prescriptions))
+	      (step-names  (mapcar (compose #'symbol-name #'cnc-step-name) steps))
+	      (step-bodies (mapcar #'cnc-step-body steps)))
+	 (return (make-cnc-program :items         (mapcar #'item-collection-name items)
+				   :tags          (append dangling-tag-names tag-names)
+				   :step-names    step-names
+				   :step-bodies   step-bodies
+				   :input-tags    (mapcar #'tag-collection-name generator-tag-collections)
+				   :prescriptions (pairlis step-names tag-names)
+				   :tuned-steps   tuned-steps)))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;  CNC STEP FUNCTIONS  ;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defstruct cnc-step
+  (name (gensym "step"))
+  body
+  inputs
+  outputs)
+
+(defstruct kernel 
+  name
+  parameter-names
+  body-generator)
+
+(defun apply-kernel (kernel inputs outputs &optional parameter-values)
+  (assert (same-length-p parameter-values (kernel-parameter-names kernel)))
+  (make-cnc-step :name (gensym (kernel-name kernel))
+		 :body (funcall (kernel-body-generator kernel)
+				inputs
+				outputs
+				parameter-values)
+		 :inputs inputs
+		 :outputs outputs))
+
+(defmacro defkernel (name (&rest inputs) (&rest outputs) (&rest parameters)
+		     body-string)
+  (alexandria:with-gensyms (g-name g-inputs g-outputs g-parameters g-body-string)
+    `(let  ((,g-name ,(symbol-to-string name))
+	    (,g-inputs (list ,@(symbol-list-to-string inputs)))
+	    (,g-outputs (list ,@(symbol-list-to-string outputs)))
+	    (,g-parameters (list ,@(symbol-list-to-string parameters)))
+	    (,g-body-string ,body-string))
+       (flet ((body-generator (actual-inputs actual-outputs parameters)
+		(assert (and (same-length-p actual-inputs ,g-inputs)
+			     (same-length-p actual-outputs ,g-outputs)
+			     (same-length-p parameters ,g-parameters)))
+		(replace-all-matching-pairs (pairlis (mapcar #'concatenate-escapes (append ,g-inputs ,g-outputs ,g-parameters))
+						     (append actual-inputs actual-outputs parameters))
+					    ,g-body-string)))
+	 (setf (get ',name 'kernel)
+	       (make-kernel :name ,g-name
+			    :parameter-names ,g-parameters
+			    :body-generator #'body-generator))))))
+
+;; (defgeneric instantiate-kernel (step-kernel input-cnc-tangle output-cnc-tangle signals &rest parameters))
+
+;; ;;; default
+;; (defmethod instantiate-kernel (step-kernel)
+;; 			       input-cnc-tangle
+;; 			       output-cnc-tangle
+;; 			       signals
+;; 			       &rest parameters)
+;;   (apply-kernel step-kernel
+;; 		(list (cnc-tangle-item-collection input-cnc-tangle))
+;; 		(list (cnc-tangle-item-collection output-cnc-tangle)
+;; 		      (cnc-tangle-tag-collection  output-cnc-tangle))
+;; 		(mapcar #'number-to-string parameters))
+
+
+(defkernel E (in_items) (out_items out_tags) (size qid_1 qid_2)
+"
+amplitude a_i;
+const int i = t;
+if (`qid_2` > `qid_1`) { printf(\"WARNING: qid2 > qid1\\n\"); }
+c.`in_items`.get( i , a_i );
+
+const int f_i = tensor_permute( i , `size` , `qid_1`, `qid_2` );
+
+if (f_i % 4 == 3)
+  a_i = - a_i;
+
+c.`out_items`.put( i , a_i );
+c.`out_tags`.put( i );
+")
+
+(defkernel X (in_tangle) (out_tangle out_tags) (size qid)
+"
+amplitude a_i;
+const int i = t;
+const int m = `qid`;
+const int n = `size` / `qid`;
+
+c.`in_tangle`.get( i , a_i );
+
+const int f_i = permute( i , n, m );
+
+const int f_target_index = f_i ^ 1;
+const int target_index = permute( f_target_index , m , n );
+
+c.`out_tangle`.put( target_index , a_i );
+c.`out_tags`.put( target_index );
+")
+
+(defkernel Z (in_tangle) (out_tangle out_tags) (size qid)
+"
+amplitude a_i;
+const int i = t;
+const int m = `qid`;
+const int n = `size` / `qid`;
+
+c.`in_tangle`.get( i , a_i );
+
+const int f_i = permute( i , n, m );
+
+if (f_i % 2)
+  a_i = -a_i;
+
+c.`out_tangle`.put( i , a_i );
+c.`out_tags`.put( i );
+")
+
+(defkernel M (in_tangle) (out_tangle out_tags) (size qid)
+"
+amplitude a_i1;
+amplitude a_i2;
+const unsigned int i = t;
+const unsigned int m = `qid`;
+const unsigned int n = `size` / `qid`;
+const unsigned int f_i = permute( i , n , m );
+
+if ((f_i % 2) == 0) {
+  const unsigned int i2 = permute( f_i^1 , m , n );
+  const unsigned int new_index = i/2;
+  // phi's will depend on the angle of measurement
+  const amplitude phi_1 = 0;
+  const amplitude phi_2 = 1;
+  c.`in_tangle`.get( i  , a_i1 );
+  c.`in_tangle`.get( i2 , a_i2 );
+  // normally apply factor to i1 and i2 here, skipping this for now 
+  c.`out_tangle`.put( new_index , a_i1 * phi_1 + a_i2 * phi_2);
+  c.`out_tags`.put( new_index );
+}
+")
+
+;(defkernel merge_M (in_tangle) (out_tangle out_tags) (size qid))
+
+(defkernel check_M (in_tangle signals) (do_m_tags out_tangle out_tags signals) (qid)
+"
+amplitude amp;
+  // shortcut: lets say measurement always returns 1;
+bool measurement_result = true;
+if (measurement_result) {
+  c.`signals`.put(t,true);
+  c.`do_m_tags`.put(t); // lets do the measurement
+}
+else {
+  c.`signals`.put(t,false);
+  c.`in_tangle`.get(t,amp); // proceed with the next computation
+  c.`out_tangle`.put(t,amp);
+  c.`out_tags`.put(t);
+}
+"
+)
+
+(defkernel gen_tangle () (tangle tags) (size)
+"
+const amplitude amp( 1.0/`size` );
+for(int i(0);i<`size`;++i) {
+  c.`tangle`.put(i,amp);
+  c.`tags`.put(i);
+}
+")
+
+(defkernel output_tangle (tangle) () (size)
+"
+amplitude amp;
+c.`tangle`.get(t,amp);
+printf(\"`tangle` %d: %1.4f\\n\",t,amp);
+")
+
+(defkernel kron (tangle-1 tangle-2) (tangle-out tag-out) (size-2)
+"
+amplitude amp_1;
+amplitude amp_2;
+c.`tangle-1`.get(t,amp_1);
+for(int i(0);i<`size-2`;++i) {
+  const unsigned int new_index( t * `size-2` + i );
+  c.`tangle-2`.get(i,amp_2);
+  c.`tangle-out`.put( new_index, amp_1 * amp_2 );
+  c.`tag-out`.put(new_index);
+}
+")
+
+;; (pprint (apply-kernel (get 'E 'kernel)
+;; 	       '("foo")
+;; 	       '("bar" "baz")
+;; 	       (mapcar #'number-to-string
+;; 		       '(8 2 4))))
+
+;; (pprint (apply-kernel (get 'X 'kernel)
+;; 	       '("foo")
+;; 	       '("bar" "baz")
+;; 	       (mapcar #'(lambda (num) (format nil "~A" num)) '(8 2))))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;  STRING/MATCH OPERATIONS  ;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
+(defun replace-matching (match-string target-string replace-by-string)
+  (declare (type string match-string target-string replace-by-string))
+  (let ((index (search match-string target-string)))
+    (if index
+	(with-output-to-string (out) 
+	  (write-string target-string out :end index)
+	  (write-string replace-by-string out)
+	  (write-string target-string out :start (+ index (length match-string)))))))
+
+(defun replace-all-matching (match-string target-string replace-by-string)
+  (let ((replaced (replace-matching match-string target-string replace-by-string)))
+    (if replaced
+	(replace-all-matching match-string replaced replace-by-string)
+	target-string)))
+
+(defun replace-all-matching-pairs (match-replace-pairs target-string)
+  (loop 
+     for (match . replace) in match-replace-pairs
+     for replaced = (replace-all-matching match target-string replace)
+     then (replace-all-matching match replaced replace)
+     finally (return replaced)))
+
+(defun number-to-string (num)
+  (format nil "~A" num))
+
+(defun concatenate-escapes (str)
+  (concatenate 'string "`" str "`"))
+
+;;;; MISC UTILITY FUNCTIONS
+
+(defun same-length-p (list-1 list-2)
+  (= (list-length list-1)
+     (list-length list-2)))
+
+
+
+;;TEST
+
+(defstruct cnc-program 
+  items
+  tags
+  step-names
+  step-bodies
+  input-tags
+  prescriptions
+  tuned-steps)
+
+#+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1))))))
+       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+       )
+;  (pprint cnc-program)
+  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+      cnc-program
+    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
+
+#+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc '((E 1 2) (M 1 0)))))
+       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+       )
+;  (pprint cnc-program)
+  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+      cnc-program
+    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
+
+#+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc *short-w3-program*)))
+       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+       )
+;  (pprint cnc-program)
+  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+      cnc-program
+    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
+
+
+
+#+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc *w3-program*)))
+       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+       )
+;  (pprint cnc-program)
+  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+      cnc-program
+    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
+
+;(show-dot (compile-mc *w3-program*))
+
+#+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc '((E 0 1) (E 1 2) (E 3 4) (E 9 10) (E 11 12) (M 0 0) (M 1 0) (X 2 (q 1))))))
+       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+       )
+;  (pprint cnc-program)
+  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+      cnc-program
+    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
+
+#+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc '((E 1 2) (E 2 3)))))
+       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+       )
+;  (pprint cnc-program)
+  (with-slots (items tags step-names step-bodies input-tags prescriptions)
+      cnc-program
+    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions)))
+
+(defun mc-read-compile ()
+  (let* ((mc-program (read))
+	 (g (mc-graph-to-cnc-graph (compile-mc mc-program)))
+	 (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+       )
+;  (pprint cnc-program)
+  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+      cnc-program
+    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps))))

@@ -299,12 +299,9 @@ void kron_tuner::depends( const int & tag, context & c, dependency_consumer & dC
 	      &key (target-directory "") 
 	           (target-header-file "mccompiled.h") 
 	           (target-source-file "mccompiled.C"))
-  #+nil(assert (= (list-length tag-names) ; checking if each step is prescribed to a tag collection
-	     (list-length prescriptions)
-	     (list-length step-bodies))) 
-  (format t "Compiling ...~%")
   (let ((header (concatenate 'string target-directory target-header-file))
 	(source (concatenate 'string target-directory target-source-file)))
+    (format t "Generating header file... ")
     (write-to-file header
       (generate-header item-names 
 		       tag-names 
@@ -312,6 +309,7 @@ void kron_tuner::depends( const int & tag, context & c, dependency_consumer & dC
 		       prescriptions
 		       input-tag-names
 		       tuned-steps))
+    (format t "done~%Generating source file... ")
     (write-to-file source
       (generate-source step-names step-bodies item-names))
-    (format t "Done!~%Written to ~A and ~A.~%" header source)))
+    (format t "done~%Written to ~A and ~A.~%" header source)))

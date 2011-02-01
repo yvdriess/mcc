@@ -1555,11 +1555,17 @@ for(int i(0);i<`size-2`;++i) {
     (cnc-gen:build items tags step-names step-bodies input-tags prescriptions)))
 
 (defun mc-read-compile ()
-  (let* ((mc-program (read))
-	 (g (mc-graph-to-cnc-graph (compile-mc mc-program)))
-	 (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
-       )
-;  (pprint cnc-program)
-  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
-      cnc-program
-    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps))))
+  (format t " mcc> ")
+  (finish-output)
+  (let ((mc-program (read)))
+    (format t "Generating MC program graph... ")
+    (let ((mc-graph (compile-mc mc-program)))
+      (format t "done~%Generating CnC-specific graph... ")
+      (let ((g (mc-graph-to-cnc-graph mc-graph)))
+	(format t "done~%Collecting data for CnC code generation... ")
+	(let ((cnc-program (construct-cnc-program-from-graph g)))
+	  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+	      cnc-program
+	    (format t "done~%Beginning code generation.~%")
+	    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)
+	    'ok))))))

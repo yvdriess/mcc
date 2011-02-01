@@ -303,13 +303,16 @@ void kron_tuner::depends( const int & tag, context & c, dependency_consumer & dC
   #+nil(assert (= (list-length tag-names) ; checking if each step is prescribed to a tag collection
 	     (list-length prescriptions)
 	     (list-length step-bodies))) 
-  (write-to-file (concatenate 'string target-directory target-header-file)
-    (generate-header item-names 
-		     tag-names 
-		     step-names
-		     prescriptions
-		     input-tag-names
-		     tuned-steps))
-  (write-to-file (concatenate 'string target-directory target-source-file)
-    (generate-source step-names step-bodies item-names))
-  (format t ))
+  (format t "Compiling ...~%")
+  (let ((header (concatenate 'string target-directory target-header-file))
+	(source (concatenate 'string target-directory target-source-file)))
+    (write-to-file header
+      (generate-header item-names 
+		       tag-names 
+		       step-names
+		       prescriptions
+		       input-tag-names
+		       tuned-steps))
+    (write-to-file source
+      (generate-source step-names step-bodies item-names))
+    (format t "Done!~%Written to ~A and ~A.~%" header source)))

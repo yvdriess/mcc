@@ -179,7 +179,6 @@ void kron_tuner::depends( const int & tag, context & c, dependency_consumer & dC
 	(indented
 	  (loop for entry in prescriptions
 	     for tuned = (assoc (car entry) tuned-steps)
-	       do (print (cddr tuned))
 	     if tuned
 							   ; this is
 							   ; hidious!

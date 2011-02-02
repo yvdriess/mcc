@@ -1384,7 +1384,7 @@ const unsigned int f_i = permute( i , n , m );
 
 if ((f_i % 2) == 0) {
   const unsigned int i2 = permute( f_i^1 , m , n );
-  const unsigned int new_index = i/2;
+  const unsigned int new_index = permute( f_i/2 , m , n );
   // phi's will depend on the angle of measurement
   const amplitude phi_1 = 0;
   const amplitude phi_2 = 1;

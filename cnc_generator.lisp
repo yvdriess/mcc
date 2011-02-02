@@ -112,18 +112,6 @@ static int permute(const int i,const int m, const int n) {
 (defun declare-tuners ()
   (line "
 struct context;
-struct e_tuner : public CnC::default_tuner< int, context >
-{
-    e_tuner(const unsigned int size,
-            const unsigned int m,
-            const unsigned int n,
-	    CnC::item_collection< int, amplitude > &input): size(size),m(m),n(n), input(input) {}
-    const unsigned int size, m, n;
-    CnC::item_collection< int, amplitude > &input;
-
-    template< class dependency_consumer >
-    void depends( const int & tag, context & c, dependency_consumer & dC ) const;
-};
 
 struct kron_tuner : public CnC::default_tuner< int, context >
 {
@@ -135,22 +123,40 @@ struct kron_tuner : public CnC::default_tuner< int, context >
   template< class dependency_consumer >
     void depends( const int & tag, context & c, dependency_consumer & dC ) const;
 };
+
+struct m_tuner : public CnC::default_tuner< int, context >
+{
+   m_tuner(const unsigned int size,
+           const unsigned int qid,
+           CnC::item_collection< int, amplitude > &input): 
+        size(size), qid(qid), input(input) {}
+   const unsigned int size;
+   const unsigned int qid;
+   CnC::item_collection< int, amplitude > &input;
+
+  template< class dependency_consumer >
+    void depends( const int & tag, context & c, dependency_consumer & dC ) const;
+};
 "))
 
 (defun define-tuners ()
   (line "
-template< class dependency_consumer >
-void e_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
-{
-  //dC.depends( input , tensor_permute( tag , size, m , n) );
-}
-
 template< class dependency_consumer >
 void kron_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
 {
   for(unsigned int i(0);i<size2;++i) {
     dC.depends( input , i );
   }
+}
+
+template< class dependency_consumer >
+void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
+{
+  const unsigned int m = qid;
+  const unsigned int n = size / qid;
+  const unsigned int f_i = permute( tag , n , m );
+  const unsigned int i2  = permute( f_i^1, m , n );
+  dC.depends( input , i2 );
 }
 "))
 

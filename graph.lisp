@@ -1119,7 +1119,8 @@ connections to the program graph."
 (defmethod instantiate-node-content ((operation cnc-measurement-operation) node cnc-graph)
   ;; the operation step kernel performs the M operation, but there is a second step 'check-M' that needs to be introduced
   (with-slots (check-step-kernel step-kernel input-item-collection output-item-collection output-tag-collection 
-	       signal-item-collection qubit-index size do-m-tag-collection)
+	       signal-item-collection qubit-index size do-m-tag-collection
+	       tuner-name tuner-args)
       operation
     (setf check-step-kernel
 					; (in_tangle signals) 
@@ -1146,7 +1147,11 @@ connections to the program graph."
 			(list (item-collection-name output-item-collection) 
 			      (tag-collection-name output-tag-collection))
 					; params: size qid
-			(mapcar #'number-to-string (list size qubit-index))))))
+			(mapcar #'number-to-string (list size qubit-index))))
+    (setf tuner-name "m_tuner"
+	  tuner-args (list (number-to-string size)
+			   (number-to-string qubit-index)
+			   (item-collection-name input-item-collection)))))
 
 (defmethod instantiate-node-content ((cnc-tangle cnc-tangle) node cnc-graph)
   ;; if tangle is an input or output node, add a cnc-step to it

@@ -1556,18 +1556,18 @@ for(int i(0);i<`size-2`;++i) {
 
 (defun mc-read-compile ()
   (ignore-errors 
-       (progn 
-	 (format t " mcc> ")
-	 (finish-output)
-	 (let ((mc-program (read *standard-input* nil)))
-	   (format t "Generating MC program graph... ")
-	   (let ((mc-graph (compile-mc mc-program)))
-	     (format t "done~%Generating CnC-specific graph... ")
-	     (let ((g (mc-graph-to-cnc-graph mc-graph)))
-	       (format t "done~%Collecting data for CnC code generation... ")
-	       (let ((cnc-program (construct-cnc-program-from-graph g)))
-		 (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
-		     cnc-program
-		   (format t "done~%Beginning code generation.~%")
-		   (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)
-		   'ok))))))))
+    (sb-sys:enable-interrupt sb-unix:sigint #'(lambda () (sb-ext:quit)))
+    (format t " mcc> ")
+    (finish-output)
+    (let ((mc-program (read *standard-input* nil)))
+      (format t "Generating MC program graph... ")
+      (let ((mc-graph (compile-mc mc-program)))
+	(format t "done~%Generating CnC-specific graph... ")
+	(let ((g (mc-graph-to-cnc-graph mc-graph)))
+	  (format t "done~%Collecting data for CnC code generation... ")
+	  (let ((cnc-program (construct-cnc-program-from-graph g)))
+	    (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+		cnc-program
+	      (format t "done~%Beginning code generation.~%")
+	      (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)
+	      'ok)))))))

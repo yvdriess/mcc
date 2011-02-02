@@ -154,8 +154,8 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 {
   const unsigned int m = qid;
   const unsigned int n = size / qid;
-  const unsigned int f_i = permute( tag , n , m );
-  const unsigned int i2  = permute( f_i^1, m , n );
+  const unsigned int f_i = tensor_permute( tag , n , m );
+  const unsigned int i2  = tensor_permute( f_i^1, m , n );
   dC.depends( input , i2 );
 }
 "))

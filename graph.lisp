@@ -1083,8 +1083,9 @@ connections to the program graph."
 					    (tag-collection-name output-tag-collection))
 					; params: size qid qid-2
 				      params)
-	    tuner-name "e_tuner"
-	    tuner-args (append params (list (item-collection-name input-item-collection)))))))
+	   ;; tuner-name "e_tuner"
+	   ;; tuner-args (append params (list (item-collection-name input-item-collection)))
+	    ))))
 
 (defmethod instantiate-node-content ((operation cnc-kronecker-operation) node cnc-graph)
   (with-slots (step-kernel input-item-collection input-tag-collection

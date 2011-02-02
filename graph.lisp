@@ -1555,11 +1555,11 @@ for(int i(0);i<`size-2`;++i) {
     (cnc-gen:build items tags step-names step-bodies input-tags prescriptions)))
 
 (defun mc-read-compile ()
-  (unwind-protect 
+  (ignore-errors 
        (progn 
 	 (format t " mcc> ")
 	 (finish-output)
-	 (let ((mc-program (read :eof-error-p nil )))
+	 (let ((mc-program (read *standard-input* nil)))
 	   (format t "Generating MC program graph... ")
 	   (let ((mc-graph (compile-mc mc-program)))
 	     (format t "done~%Generating CnC-specific graph... ")
@@ -1570,5 +1570,4 @@ for(int i(0);i<`size-2`;++i) {
 		     cnc-program
 		   (format t "done~%Beginning code generation.~%")
 		   (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)
-		   'ok))))))
-    (quit)))
+		   'ok))))))))

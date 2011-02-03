@@ -237,7 +237,7 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
     (line "}~%")
  
     ;; insert code that fulls the right tag and item collections with elements
-    (lines "~A.put(0);" input-tag-names)
+    (lines "ctx.~A.put(0);" input-tag-names)
 
     (line "ctx.wait();")
     ;; insert code that retrieves the info

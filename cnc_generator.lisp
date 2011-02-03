@@ -167,7 +167,7 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
     (line "int execute( const int& t, context& c ) const;"))
   (line "};"))
 
-(defun generate-context-header (item-names tag-names prescriptions input-tag-names tuned-steps)
+(defun generate-context-header (item-names tag-names prescriptions tuned-steps)
   (line "~%struct context: public CnC::context< context > {~%")
   (indented
     (lines "CnC::item_collection< int, amplitude > ~A;" item-names)
@@ -194,7 +194,8 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 	  #+nil(lines "prescribe( ~A, ~A() );"
 		 (mapcar #'cdr prescriptions)
 		 (mapcar #'car prescriptions))
-	  (lines "~A.put(0);" input-tag-names))
+;	  (lines "~A.put(0);" input-tag-names)
+	  )
 	(line "}~%"))))
   (line "};~%"))
 
@@ -215,7 +216,7 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
   (define-tuners)
   (line "#endif"))
 
-(defun generate-main-source (item-names step-names)
+(defun generate-main-source (item-names step-names input-tag-names)
   (line "int main(int argc, char* argv[]) {")
   (indented 
     (line "context ctx;")
@@ -237,6 +238,8 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
     (line "}~%")
  
     ;; insert code that fulls the right tag and item collections with elements
+    (lines "~A.put(0);" input-tag-names)
+
     (line "ctx.wait();")
     ;; insert code that retrieves the info
     (line "return CnC::CNC_Success;"))
@@ -250,11 +253,11 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
     (line "return CnC::CNC_Success;"))
   (line "}~%"))
 
-(defun generate-source (step-names step-bodies item-names)
+(defun generate-source (step-names step-bodies item-names input-tag-names)
   (line "#include <stdio.h>")
   (line "#include <stdlib.h>")
   (line "#include \"~A.h\"~%" *filename*)
-  (generate-main-source item-names step-names)
+  (generate-main-source item-names step-names input-tag-names)
 ;  (line *source-permute-function*)
 ;  (line *source-tensor-permute-function*)
   (mapcar #'generate-step-source step-names step-bodies)
@@ -318,5 +321,5 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 		       tuned-steps))
     (format t "done~%Generating source file... ")
     (write-to-file source
-      (generate-source step-names step-bodies item-names))
+      (generate-source step-names step-bodies item-names input-tag-names))
     (format t "done~%Written to ~A and ~A.~%" header source)))

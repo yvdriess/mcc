@@ -203,7 +203,6 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 			tag-names 
 			step-names
 			prescriptions
-			input-tag-names
 			tuned-steps)
   ;; preamble
   (line #.*header-preamble*)
@@ -212,7 +211,7 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
   (line *source-permute-function*)
   (line *source-tensor-permute-function*)
   (declare-tuners)
-  (generate-context-header item-names tag-names prescriptions input-tag-names tuned-steps)
+  (generate-context-header item-names tag-names prescriptions tuned-steps)
   (define-tuners)
   (line "#endif"))
 
@@ -317,7 +316,6 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 		       tag-names 
 		       step-names
 		       prescriptions
-		       input-tag-names
 		       tuned-steps))
     (format t "done~%Generating source file... ")
     (write-to-file source

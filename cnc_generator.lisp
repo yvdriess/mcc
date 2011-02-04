@@ -13,6 +13,8 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defvar *header-preamble*
 "
+// copyright Yves Vandriessche 2011
+
 #ifndef INCLUDED_MCCOMPILED_H
 #define INCLUDED_MCCOMPILED_H
 

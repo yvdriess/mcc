@@ -771,7 +771,7 @@ connections to the program graph."
 
 ;(compile-operation (make-ag-entanglement :qubit-1 2 :qubit-2 1) (make-empty-graph))
 ;(show-dot (compile-operation (make-ag-entanglement :qubit-1 1 :qubit-2 6) (compile-operation (make-ag-entanglement :qubit-1 5 :qubit-2 6) (test-op-graph))))
-;(show-dot (compile-to-graph (parse-sequence '((E 0 1) (E 1 2) (M 1 0) (X 2 (q 1))))))
+;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (M 1 0) (X 2 (q 1))))))
 ;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3)))))
 ;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5))))))))
 ;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (X 4 )))))
@@ -1107,7 +1107,7 @@ connections to the program graph."
       ;; 	(rotatef input2-item-collection input-item-collection)
       ;; 	(rotatef size-2 size))
       (setf step-kernel (apply-kernel step-kernel
-					;  (tangle-1 tangle-2) (tangle-out tag-out) (size-2)
+					;  (tangle-1 tangle-2) (tangle-out tag-out) (size size-2)
 				      (list (item-collection-name input-item-collection)
 					    (item-collection-name input2-item-collection))
 				      (list (item-collection-name output-item-collection)
@@ -1414,8 +1414,8 @@ if (measurement_result) {
   c.`do_m_tags`.put(t); // lets do the measurement
 }
 else {
-  c.`signals`.put(t,false);
   c.`in_tangle`.get(t,amp); // proceed with the next computation
+  c.`signals`.put(t,false);
   c.`out_tangle`.put(t,amp);
   c.`out_tags`.put(t);
 }
@@ -1441,12 +1441,15 @@ printf(\"`tangle` %d: %1.4f\\n\",t,amp);
 (defkernel kron (tangle-1 tangle-2) (tangle-out tag-out) (size-2)
 "
 amplitude amp_1;
-amplitude amp_2;
+amplitude amps[`size-2`];
+
 c.`tangle-1`.get(t,amp_1);
 for(int i(0);i<`size-2`;++i) {
+  c.`tangle-2`.get(i,amps[i]);
+}
+for(int i(0);i<`size-2`;++i) {
   const unsigned int new_index( t * `size-2` + i );
-  c.`tangle-2`.get(i,amp_2);
-  c.`tangle-out`.put( new_index, amp_1 * amp_2 );
+  c.`tangle-out`.put( new_index, amp_1 * amps[i] );
   c.`tag-out`.put(new_index);
 }
 ")

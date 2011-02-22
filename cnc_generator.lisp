@@ -163,7 +163,7 @@ template< class dependency_consumer >
 void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
 {
   if ( tag & qid ) 
-    dC.depends( input , compact_bit_index(i, qid) );
+    dC.depends( input , compact_bit_index(tag, qid) );
 }
 "))
 

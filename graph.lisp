@@ -1442,7 +1442,7 @@ else {
 "
 const amplitude amp( 1.0/`size` );
 for(int i(0);i<`size`;++i) {
-  c.`tangle`.put( i , amp , 1 );
+  c.`tangle`.put( i , amp );
   c.`tags`.put(i);
 }
 ")
@@ -1465,7 +1465,7 @@ for(int i(0);i<`size-2`;++i) {
 }
 for(int i(0);i<`size-2`;++i) {
   const unsigned int new_index( t * `size-2` + i );
-  c.`tangle-out`.put( new_index, amp_1 * amps[i] , 1);
+  c.`tangle-out`.put( new_index, amp_1 * amps[i] );
   c.`tag-out`.put(new_index);
 }
 ")

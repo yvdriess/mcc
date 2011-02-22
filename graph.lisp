@@ -1397,8 +1397,8 @@ if ((i & m) == 0) {
   c.`in_tangle`.get( i  , a_i1 );
   c.`in_tangle`.get( i2 , a_i2 );
   const amplitude new_amp = a_i1 * phi_0 + a_i2 * phi_1;
-  const unsigned new_index = (i - i % (2 * m) >> 1) + i % m;
-  c.`out_tangle`.put( new_index , a_i1 * phi_0 + a_i2 * phi_1 , 1);
+  const unsigned new_index = ((i - i % (2 * m)) >> 1) + i % m; //compact index
+  c.`out_tangle`.put( new_index , new_amp , 1);
   c.`out_tags`.put( new_index );
 }
 ")

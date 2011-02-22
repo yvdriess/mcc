@@ -1385,10 +1385,9 @@ amplitude a_i1;
 amplitude a_i2;
 const unsigned int i = t;
 const unsigned int m = `qid`;
-const unsigned int n = `size` / `qid`;
+//const unsigned int n = `size` / `qid`;
 //const unsigned int f_i = permute( i , m , n );
-const double e = 2.71828183;
-const double pi = 3.14159265;
+//const double pi = 3.14159265;
 const double alpha = 0;  // alpha is normally a param, constant for now
 const amplitude phi_0 = sqrt(2);
 const amplitude phi_1 = exp(alpha) * sqrt(2); // normally should be -ia (complex)
@@ -1398,8 +1397,8 @@ if ((i & m) == 0) {
   c.`in_tangle`.get( i  , a_i1 );
   c.`in_tangle`.get( i2 , a_i2 );
   const amplitude new_amp = a_i1 * phi_0 + a_i2 * phi_1;
-  const unsigned new_index = ((i - (i mod (2 * m))) >> 1) + (1 % m);
-  c.`out_tangle`.put( new_index , a_i1 * phi_1 + a_i2 * phi_2 , 1);
+  const unsigned new_index = (i - i % (2 * m) >> 1) + i % m;
+  c.`out_tangle`.put( new_index , a_i1 * phi_0 + a_i2 * phi_1 , 1);
   c.`out_tags`.put( new_index );
 }
 ")

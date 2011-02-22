@@ -1339,7 +1339,7 @@ const int f_i = tensor_permute( i , `size` , `qid_1`, `qid_2` );
 if (f_i % 4 == 3)
   a_i = - a_i;
 
-c.`out_items`.put( i , a_i, 1 );
+c.`out_items`.put( i , a_i );
 c.`out_tags`.put( i );
 ")
 

@@ -1339,7 +1339,7 @@ const int f_i = tensor_permute( i , `size` , `qid_1`, `qid_2` );
 if (f_i % 4 == 3)
   a_i = - a_i;
 
-c.`out_items`.put( i , a_i );
+c.`out_items`.put( i , a_i, 1 );
 c.`out_tags`.put( i );
 ")
 
@@ -1357,7 +1357,7 @@ const int f_i = permute( i , n, m );
 const int f_target_index = f_i ^ 1;
 const int target_index = permute( f_target_index , m , n );
 
-c.`out_tangle`.put( target_index , a_i );
+c.`out_tangle`.put( target_index , a_i , 1 );
 c.`out_tags`.put( target_index );
 ")
 
@@ -1375,7 +1375,7 @@ const int f_i = permute( i , n, m );
 if (f_i % 2)
   a_i = -a_i;
 
-c.`out_tangle`.put( i , a_i );
+c.`out_tangle`.put( i , a_i , 1);
 c.`out_tags`.put( i );
 ")
 
@@ -1386,8 +1386,25 @@ amplitude a_i2;
 const unsigned int i = t;
 const unsigned int m = `qid`;
 const unsigned int n = `size` / `qid`;
-const unsigned int f_i = permute( i , n , m );
+//const unsigned int f_i = permute( i , m , n );
+const double e = 2.71828183;
+const double pi = 3.14159265;
+const double alpha = 0;  // alpha is normally a param, constant for now
+const amplitude phi_0 = sqrt(2);
+const amplitude phi_1 = exp(alpha) * sqrt(2); // normally should be -ia (complex)
 
+if ((i & m) == 0) {
+  const unsigned int i2 = i + m;
+  c.`in_tangle`.get( i  , a_i1 );
+  c.`in_tangle`.get( i2 , a_i2 );
+  const amplitude new_amp = a_i1 * phi_0 + a_i2 * phi_1;
+  const unsigned new_index = ((i - (i mod (2 * m))) >> 1) + (1 % m);
+  c.`out_tangle`.put( new_index , a_i1 * phi_1 + a_i2 * phi_2 , 1);
+  c.`out_tags`.put( new_index );
+}
+")
+
+#|
 if ((f_i % 2) == 0) {
   const unsigned int i2 = permute( f_i^1 , m , n );
   const unsigned int new_index = permute( f_i/2 , m , n );
@@ -1397,10 +1414,10 @@ if ((f_i % 2) == 0) {
   c.`in_tangle`.get( i  , a_i1 );
   c.`in_tangle`.get( i2 , a_i2 );
   // normally apply factor to i1 and i2 here, skipping this for now 
-  c.`out_tangle`.put( new_index , a_i1 * phi_1 + a_i2 * phi_2);
+  c.`out_tangle`.put( new_index , a_i1 * phi_1 + a_i2 * phi_2 , 1);
   c.`out_tags`.put( new_index );
 }
-")
+|#
 
 ;(defkernel merge_M (in_tangle) (out_tangle out_tags) (size qid))
 
@@ -1416,7 +1433,7 @@ if (measurement_result) {
 else {
   c.`in_tangle`.get(t,amp); // proceed with the next computation
   c.`signals`.put(t,false);
-  c.`out_tangle`.put(t,amp);
+  c.`out_tangle`.put( t , amp , 1 );
   c.`out_tags`.put(t);
 }
 "
@@ -1426,7 +1443,7 @@ else {
 "
 const amplitude amp( 1.0/`size` );
 for(int i(0);i<`size`;++i) {
-  c.`tangle`.put(i,amp);
+  c.`tangle`.put( i , amp , 1 );
   c.`tags`.put(i);
 }
 ")
@@ -1449,7 +1466,7 @@ for(int i(0);i<`size-2`;++i) {
 }
 for(int i(0);i<`size-2`;++i) {
   const unsigned int new_index( t * `size-2` + i );
-  c.`tangle-out`.put( new_index, amp_1 * amps[i] );
+  c.`tangle-out`.put( new_index, amp_1 * amps[i] , 1);
   c.`tag-out`.put(new_index);
 }
 ")

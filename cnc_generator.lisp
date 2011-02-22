@@ -27,7 +27,8 @@ struct context;
 ")
   (defvar *source-tensor-permute-function*
 "
-static int tensor_permute(const int i,const int siz, const int i1, const int i2) {
+static unsigned int tensor_permute(const unsigned int i,const unsigned int siz, 
+                                   const unsigned int i1, const unsigned int i2) {
   // MAKE SURE i1 >= i2 !!!
   // const int o = i1;
   const unsigned int m = 2;
@@ -41,9 +42,16 @@ static int tensor_permute(const int i,const int siz, const int i1, const int i2)
 }")
   (defvar *source-permute-function*
 "
-static int permute(const int i,const int m, const int n) {
+static unsigned int permute(const unsigned int i,const unsigned int m, 
+                            const unsigned int n) {
   return n * ( i % m ) + floor( i / m ); 
 }")
+  (defvar *source-compact-index-function*
+"
+static unsigned int compact_bit_index(const unsigned int i, const unsigned int bit) {
+  return ((i - i % (2 * bit)) >> 1) + i % bit;
+}
+")
   (defvar *indentation* 0)
   (defvar *seperator* "")
   (defvar *line-stream* t)
@@ -154,11 +162,8 @@ void kron_tuner::depends( const int & tag, context & c, dependency_consumer & dC
 template< class dependency_consumer >
 void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
 {
-  const unsigned int m = qid;
-  const unsigned int n = size / qid;
-  const unsigned int f_i = permute( tag , n , m );
-  const unsigned int i2  = permute( f_i^1, m , n );
-  dC.depends( input , i2 );
+  if ( tag & m ) 
+    dC.depends( input , compact_bit_index(i, qid) );
 }
 "))
 
@@ -212,6 +217,7 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
   (newline)
   (line *source-permute-function*)
   (line *source-tensor-permute-function*)
+  (line *source-compact-index-function*)
   (declare-tuners)
   (generate-context-header item-names tag-names prescriptions tuned-steps)
   (define-tuners)

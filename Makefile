@@ -11,6 +11,8 @@ $(info More information is available in 'Getting Started > Running the samples')
 $(error CNC_INSTALL_DIR is not set)
 endif
 
+CPPFLAGS := -pg -Wall
+
 SOURCES := mccompiled.C
 
 TARGETS := mccompiled
@@ -24,10 +26,10 @@ OPT := -O2
 all:  mccompiled
 
 mccompiled: $(DEST_OBJS)
-	$(CXX) -Wall -o $@ $(DEST_OBJS) -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lcnc -ltbb -ltbbmalloc
+	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lcnc -ltbb -ltbbmalloc 
 
 %.o: %.C %.h
-	$(CXX) -Wall -c -I$(CNC_INSTALL_DIR)/include $(OPT) -o $@ $<
+	$(CXX) $(CPPFLAGS) -c -I$(CNC_INSTALL_DIR)/include $(OPT) -o $@ $<
 
 clean:
 	rm -f $(TARGETS) $(DEST_OBJS)

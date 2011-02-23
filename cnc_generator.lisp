@@ -226,13 +226,14 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 (defun generate-main-source (item-names step-names input-tag-names)
   (line "int main(int argc, char* argv[]) {")
   (indented 
+    (line "if (argc == 3) { CnC::debug::set_num_threads( atoi( argv[2] ) ); }")
+
     (line "context ctx;")
 
     ;; debug
 ;      (line "CnC::debug::trace_all(ctx, \"context\");")
     (line "switch (argc) {")
     (indented
-      (line "case 3: CnC::debug::set_num_threads( atoi( argv[2] ) );")
       (line "case 2: if (atoi(argv[1]) != 0) { ")
       (indented
 	(line "CnC::debug::collect_scheduler_statistics(ctx);")

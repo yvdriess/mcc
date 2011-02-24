@@ -165,6 +165,7 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
   if ( tag & qid ) {
     dC.depends( input , tag );
     dC.depends( input , tag + qid);
+  }
 }
 "))
 
@@ -175,10 +176,10 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
     (line "int execute( const int& t, context& c ) const;"))
   (line "};"))
 
-(defun generate-context-header (item-names tag-names prescriptions tuned-steps)
+(defun generate-context-header (item-names tag-names prescriptions tuned-steps item-sizes)
   (line "~%struct context: public CnC::context< context > {~%")
   (indented
-    (lines "CnC::item_collection< int, amplitude > ~A;" item-names)
+    (lines "CnC::item_collection< int, amplitude > ~A; // SIZE=~A" item-names item-sizes)
     (line "CnC::item_collection< int, bool > signals;")
     (lines "CnC::tag_collection< int > ~A;" tag-names)
     (line "context(): ")
@@ -211,7 +212,8 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 			tag-names 
 			step-names
 			prescriptions
-			tuned-steps)
+			tuned-steps
+			item-sizes)
   ;; preamble
   (line #.*header-preamble*)
   (mapc #'generate-step-header step-names)
@@ -220,7 +222,7 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
   (line *source-tensor-permute-function*)
   (line *source-compact-index-function*)
   (declare-tuners)
-  (generate-context-header item-names tag-names prescriptions tuned-steps)
+  (generate-context-header item-names tag-names prescriptions tuned-steps item-sizes)
   (define-tuners)
   (line "#endif"))
 
@@ -314,7 +316,7 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 ;;     (generate-source steps)))
 
 (defun build (item-names tag-names step-names step-bodies 
-	      input-tag-names prescriptions tuned-steps 
+	      input-tag-names prescriptions tuned-steps item-sizes
 	      &key (target-directory "") 
 	           (target-header-file "mccompiled.h") 
 	           (target-source-file "mccompiled.C"))
@@ -326,7 +328,8 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 		       tag-names 
 		       step-names
 		       prescriptions
-		       tuned-steps))
+		       tuned-steps
+		       item-sizes))
     (format t "done~%Generating source file... ")
     (write-to-file source
       (generate-source step-names step-bodies item-names input-tag-names))

@@ -1240,6 +1240,9 @@ connections to the program graph."
      when (cnc-tangle-p node-content)
        collect (cnc-tangle-item-collection node-content) 
          into items
+       and
+       collect (cnc-tangle-size node-content)
+         into item-sizes
      when (cnc-input-tangle-p node-content)
        collect (cnc-input-tangle-generator-tag-collection node-content)
          into generator-tag-collections
@@ -1259,6 +1262,7 @@ connections to the program graph."
 	      (step-names  (mapcar (compose #'symbol-name #'cnc-step-name) steps))
 	      (step-bodies (mapcar #'cnc-step-body steps)))
 	 (return (make-cnc-program :items         (mapcar #'item-collection-name items)
+				   :item-sizes    item-sizes
 				   :tags          (append dangling-tag-names tag-names)
 				   :step-names    step-names
 				   :step-bodies   step-bodies
@@ -1527,6 +1531,7 @@ for(int i(0);i<`size-2`;++i) {
 
 (defstruct cnc-program 
   items
+  item-sizes
   tags
   step-names
   step-bodies
@@ -1597,8 +1602,8 @@ for(int i(0);i<`size-2`;++i) {
       (let ((g (mc-graph-to-cnc-graph mc-graph)))
 	(format t "done~%Collecting data for CnC code generation... ")
 	(let ((cnc-program (construct-cnc-program-from-graph g)))
-	  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+	  (with-slots (items item-sizes tags step-names step-bodies input-tags prescriptions tuned-steps)
 	      cnc-program
 	    (format t "done~%Beginning code generation.~%")
-	    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)
+	    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps item-sizes)
 	    'ok))))))

@@ -1,7 +1,18 @@
 Measurement Calculus Compiler
 ------------------------------
 
-1. Installation
+1. Introduction
+---------------
+
+Files included:
+ - graph.lisp : Common Lisp source code for the MC compiler
+ - cnc_generator.lisp : C++ code generator, using the Intel CnC library; used by graph.lisp
+ - w3.mc : non-trivial example of a Measurement Calculus program
+ - Makefile, *.sh, ... : setup and compilation scripts, see below
+
+Any questions or comments can be sent to 'yvdriess at vub.ac.be'
+
+2. Installation
 ---------------
 
 Requires

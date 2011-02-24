@@ -11,7 +11,7 @@ $(info More information is available in 'Getting Started > Running the samples')
 $(error CNC_INSTALL_DIR is not set)
 endif
 
-CPPFLAGS := -Wall
+CPPFLAGS := -Wall -O2
 
 SOURCES := mccompiled.C
 

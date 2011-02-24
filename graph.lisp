@@ -1426,12 +1426,12 @@ amplitude amp;
   // shortcut: lets say measurement always returns 1;
 bool measurement_result = true;
 if (measurement_result) {
-  c.`signals`.put(t,true);
+  //c.`signals`.put(t,true);
   c.`do_m_tags`.put(t); // lets do the measurement
 }
 else {
   c.`in_tangle`.get(t,amp); // proceed with the next computation
-  c.`signals`.put(t,false);
+  //c.`signals`.put(t,false);
   c.`out_tangle`.put( t , amp , 1 );
   c.`out_tags`.put(t);
 }

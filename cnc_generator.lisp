@@ -1,3 +1,25 @@
+;;;; Copyright (C) 2011 by Yves Vandriessche
+
+;;;; Permission is hereby granted, free of charge, to any person obtaining a copy
+;;;; of this software and associated documentation files (the "Software"), to deal
+;;;; in the Software without restriction, including without limitation the rights
+;;;; to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+;;;; copies of the Software, and to permit persons to whom the Software is
+;;;; furnished to do so, subject to the following conditions:
+
+;;;; The above copyright notice and this permission notice shall be included in
+;;;; all copies or substantial portions of the Software.
+
+;;;; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+;;;; IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+;;;; FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+;;;; AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+;;;; LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+;;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+;;;; THE SOFTWARE.
+
+
+
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (ql:quickload 'alexandria)
   (declaim (optimize (speed 0) (debug 3) (safety 3))))
@@ -11,9 +33,33 @@
 (in-package :cnc-gen)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
+  (defvar *MIT-license*
+   "
+/*
+ Copyright (C) 2011 by Yves Vandriessche
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the \"Software\"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in
+ all copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE SOFTWARE.
+*/
+")
+
   (defvar *header-preamble*
 "
-// copyright Yves Vandriessche 2011
 
 #ifndef INCLUDED_MCCOMPILED_H
 #define INCLUDED_MCCOMPILED_H
@@ -215,6 +261,7 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 			tuned-steps
 			item-sizes)
   ;; preamble
+  (line #.*MIT-license*)
   (line #.*header-preamble*)
   (mapc #'generate-step-header step-names)
   (newline)
@@ -265,6 +312,7 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
   (line "}~%"))
 
 (defun generate-source (step-names step-bodies item-names input-tag-names)
+  (line #.*MIT-license*)
   (line "#include <stdio.h>")
   (line "#include <stdlib.h>")
   (line "#include \"~A.h\"~%" *filename*)

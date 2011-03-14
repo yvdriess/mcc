@@ -1418,7 +1418,7 @@ const double alpha = 0;  // alpha is normally a param, constant for now
 const amplitude phi_0 = sqrt(2);
 const amplitude phi_1 = exp(alpha) * sqrt(2); // normally should be -ia (complex)
 
-if (i & m) {
+if ( (i & m) == 0 ) {
   const unsigned int i2 = i + m;
   c.`in_tangle`.get( i  , a_i1 );
   c.`in_tangle`.get( i2 , a_i2 );

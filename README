@@ -17,7 +17,9 @@ Any questions or comments can be sent to 'yvdriess at vub.ac.be'
 
 Requires
  - Intel Thread Building Blocks 3.0
+	http://threadingbuildingblocks.org/ver.php?fid=173
  - Intel Concurrent Collections 0.6
+	http://software.intel.com/en-us/articles/pre-release-license-agreement-for-intel-concurrent-collections-for-cc-accept-end-user-license-agreement-and-download/
  - Steel Bank Common Lisp (sbcl) to bootstrap the compiler
  - Make sure all the TBB and CnC environment variables are set
 

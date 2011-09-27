@@ -13,20 +13,20 @@ endif
 
 CPPFLAGS := -Wall -O2 #-g3 -pg 
 
-SOURCES := mccompiled.C large_mccopmiled.C
+SOURCES := mccompiled.C
 
-TARGETS := mccompiled large_mccompiled
+TARGETS := mccompiled
+
+HEADERS := mccompiled.h
 
 DEST_OBJS=$(SOURCES:.C=.o)
 
 #OPT := -O2
 
-all:  mccompiled large_mccompiled
+all:  mccompiled
 
-mccompiled: mccompiled.o
-	$(CXX) $(CPPFLAGS) -o $@ mccompiled.o -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lcnc -ltbb -ltbbmalloc 
-large_mccompiled: large_mccompiled.o
-	$(CXX) $(CPPFLAGS) -o $@ large_mccompiled.o -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lcnc -ltbb -ltbbmalloc 
+mccompiled: $(DEST_OBJS)
+	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lcnc -ltbb -ltbbmalloc 
 
 %.o: %.C %.h
 	$(CXX) $(CPPFLAGS) -c -I$(CNC_INSTALL_DIR)/include -o $@ $<

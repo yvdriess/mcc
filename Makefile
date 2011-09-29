@@ -1,8 +1,8 @@
 ARCH := intel64
-M_UNAME := $(shell uname -m)
-ifeq ($(M_UNAME), i686)
-ARCH := ia32
-endif
+#M_UNAME := $(shell uname -m)
+#ifeq ($(M_UNAME), i686)
+#ARCH := ia32
+#endif
 
 ifeq (,$(CNC_INSTALL_DIR))
 $(info Please estblish CnC environment variables before using this Makefile.)

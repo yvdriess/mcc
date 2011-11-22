@@ -748,6 +748,7 @@ connections to the program graph."
 	       do (format dotfile "\"~A\" -> \"~A\" [];~%" (node-label node) (node-label child-node))))
     (format dotfile "}~%" )
     )
+  (format t "Dumped dot file in /tmp/graph.dot")
   ; (sb-ext:run-program "/Applications/Graphviz.app/Contents/MacOS/Graphviz" (list "/tmp/graph.dot"))
   )
 

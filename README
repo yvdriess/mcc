@@ -1,0 +1,37 @@
+Measurement Calculus Compiler
+------------------------------
+
+1. Introduction
+---------------
+
+Files included:
+ - graph.lisp : Common Lisp source code for the MC compiler
+ - cnc_generator.lisp : C++ code generator, using the Intel CnC library; used by graph.lisp
+ - w3.mc : non-trivial example of a Measurement Calculus program
+ - Makefile, *.sh, ... : setup and compilation scripts, see below
+
+Any questions or comments can be sent to 'yvdriess at vub.ac.be'
+
+2. Installation
+---------------
+
+Requires
+ - Intel Thread Building Blocks 3.0
+	http://threadingbuildingblocks.org/ver.php?fid=173
+ - Intel Concurrent Collections 0.6
+	http://software.intel.com/en-us/articles/pre-release-license-agreement-for-intel-concurrent-collections-for-cc-accept-end-user-license-agreement-and-download/
+ - Steel Bank Common Lisp (sbcl) to bootstrap the compiler
+ - Make sure all the TBB and CnC environment variables are set
+
+Quick start
+ 'sh quickstart.sh' to bootstrap, compile and run a non-trivial program that should run in the order of single-digit seconds.
+
+Bootstrapping
+ 'sh bootstrap.sh' runs a save-lisp-and-die on the MCC program written in Common Lisp, this creates a binary called ./mcc which accepts valid Measurement Calculus programs. 
+
+Compiler
+ './mcc < w3.mc' feeds a non-trivial (W3-entanglement creation) quantum computation to the compiler; producing C++ source and header files, respectively 'mccompiled.C' and 'mccompiled.h'
+
+Running the mccompiled program
+ run 'make' to build the generated C++ program and run the resulting './mccompiled'. There are two optional arguments. The first argument to mccmopiled is if you want to trace all collections (1) or not (0). As a second argument you can pass the number of threads CnC needs to limit itself to.
+	./mccompiled [trace [num_threads]]

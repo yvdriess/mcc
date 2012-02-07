@@ -43,7 +43,7 @@
   (:export compile-mc ))
 
 (eval-when (:compile-toplevel :load-toplevel)
- (declaim (optimize (speed 0) (debug 3) (safety 3))))
+  (declaim (optimize (speed 0) (debug 3) (safety 3))))
 
 (in-package :mcc)
 
@@ -82,13 +82,13 @@
 (defconstant +qubit-id-type+ 'unsigned-byte)
 
 (define-constant +angle-constants+
-  `((pi/2  . ,(/ pi 2))
-    (pi/4  . ,(/ pi 4))
-    (pi/8  . ,(/ pi 8))
-    (-pi   . ,(- pi))
-    (-pi/2 . ,(- (/ pi 2)))
-    (-pi/4 . ,(- (/ pi 4)))
-    (-pi/8 . ,(- (/ pi 8)))))
+    `((pi/2  . ,(/ pi 2))
+      (pi/4  . ,(/ pi 4))
+      (pi/8  . ,(/ pi 8))
+      (-pi   . ,(- pi))
+      (-pi/2 . ,(- (/ pi 2)))
+      (-pi/4 . ,(- (/ pi 4)))
+      (-pi/8 . ,(- (/ pi 8)))))
 
 (defun intern-exp (exp)
   (typecase exp
@@ -103,9 +103,9 @@
 (defmacro eval-lisp-angle (angle-expr)
   `(progv
        ',(loop for clause in +angle-constants+
-	    collect (car clause))
+	       collect (car clause))
        ',(loop for clause in +angle-constants+
-	    collect (cdr clause))
+	       collect (cdr clause))
      (eval ,angle-expr)))
 
 ;; number | built-in-angle | lisp-form
@@ -116,7 +116,7 @@
 	      (if angle-constant-entry
 		  (cdr angle-constant-entry)
 		  (eval-lisp-angle angle)
-		  ;(error "Invalid measurment angle: ~A~%" angle)
+					;(error "Invalid measurment angle: ~A~%" angle)
 		  )))
     (cons (eval-angle (eval-lisp-angle angle)))
     (otherwise (error "Measurement operation does not have a valid measurement angle: ~A~%" angle))))
@@ -182,7 +182,7 @@
 (defun parse-sequence (expression-list)
   "Parse a sequence of operations, passed as a list of symbols"
   (loop for exp in expression-list
-       collect (parse-operation exp)))
+	collect (parse-operation exp)))
 
 (defun parse-operation (exp)
   (assert exp (exp) "Cannot parse empty expression")
@@ -261,16 +261,16 @@ Syntax:  <identifier> | 0 | 1 | (q <qubit>) | (+ {<signal>}+ )"
       (symbol (add-ag-signal-lookup (intern (symbol-name arg) +parse-package+)
 				    ag-signal))
       (list (assert (symbolp (first arg)))
-	    (let ((operand (intern (symbol-name (first arg)) +parse-package+)))
-	      (cond ((and (eq operand +signal-qubit-symbol+) ; (q <qubit>)
-			  (= (length arg) 2))
-		     (add-ag-signal-dependency (parse-qubit (second arg))
-					       ag-signal))
-		    ((and (eq operand +signal-sum-symbol+) ; (+ {<signal>}+)
-			  (>= (length arg) 2))
-		     (loop for sub-expr in (rest arg)
-			do (setf ag-signal (parse-signal sub-expr ag-signal))))
-		    (t (error "Cannot parse signal: ~A~%" arg))))))
+       (let ((operand (intern (symbol-name (first arg)) +parse-package+)))
+	 (cond ((and (eq operand +signal-qubit-symbol+) ; (q <qubit>)
+		     (= (length arg) 2))
+		(add-ag-signal-dependency (parse-qubit (second arg))
+					  ag-signal))
+	       ((and (eq operand +signal-sum-symbol+) ; (+ {<signal>}+)
+		     (>= (length arg) 2))
+		(loop for sub-expr in (rest arg)
+		      do (setf ag-signal (parse-signal sub-expr ag-signal))))
+	       (t (error "Cannot parse signal: ~A~%" arg))))))
     ag-signal))
 
 (defun parse-qubit (arg)
@@ -359,7 +359,7 @@ Syntax:  <identifier> | 0 | 1 | (q <qubit>) | (+ {<signal>}+ )"
   (typecase obj
     (node (list obj))
     (list (assert (every #'node-p obj))
-	  obj)
+     obj)
     (t (error "A pipeline stage expects either a node or a list of nodes"))))
 
 (defun pipeline (&rest stages)
@@ -377,19 +377,19 @@ doing the same with the other stages."
       (when downstream-pipeline-stages
 	(let ((downstream-stage (first downstream-pipeline-stages)))
 	  (loop for node in upstream-stage
-	     do (setf (node-downstream-nodes node)
-		      (union (node-downstream-nodes node)
-			     downstream-stage)))
+		do (setf (node-downstream-nodes node)
+			 (union (node-downstream-nodes node)
+				downstream-stage)))
 	  (loop for node in downstream-stage
-	     do (setf (node-upstream-nodes node) 
-		      (union (node-upstream-nodes node) 
-			     upstream-stage)))
+		do (setf (node-upstream-nodes node) 
+			 (union (node-upstream-nodes node) 
+				upstream-stage)))
 	  (pipeline-connect downstream-pipeline-stages))))))
 
 (defun pipeline-to-graph (pipeline-stages)
   (pipeline-connect pipeline-stages)
   (make-graph :nodes (loop for nodes in pipeline-stages
-			  appending nodes)
+			   appending nodes)
 	      :input-nodes (first pipeline-stages)
 	      :output-nodes (first (last pipeline-stages))))
 
@@ -416,7 +416,7 @@ predicate to its _content_."
 (defun merge-tangles (tangle-1 tangle-2)
   "Returns a new tangle containing the qubits of both tangles, in order."
   #+*debug*(assert (null (intersection (tangle-qubits tangle-1)
-			      (tangle-qubits tangle-2))))
+				       (tangle-qubits tangle-2))))
   (make-tangle :qubits (append (tangle-qubits tangle-1)
 			       (tangle-qubits tangle-2))))
 
@@ -462,8 +462,8 @@ predicate to its _content_."
 
 (defgeneric qubit-signal-dependencies (operation))
 (defmethod qubit-signal-dependencies ((operation ag-measurement))
-    (append (ag-signal-qubit-flags (ag-measurement-s-signal operation))
-	    (ag-signal-qubit-flags (ag-measurement-t-signal operation))))
+  (append (ag-signal-qubit-flags (ag-measurement-s-signal operation))
+	  (ag-signal-qubit-flags (ag-measurement-t-signal operation))))
 (defmethod qubit-signal-dependencies ((operation ag-correction))
   (ag-signal-qubit-flags (ag-correction-s-signal operation)))
 
@@ -537,12 +537,12 @@ added to the list of output nodes on the graph, because corrections do not modif
 				       (node-content (second input-nodes))))))
 
 (defmethod make-output-nodes ((operation ag-measurement) input-nodes)
-  ;We 'know' that find-input-nodes has put a node with a tangle first
-  ;and one with a signal-map second
+					;We 'know' that find-input-nodes has put a node with a tangle first
+					;and one with a signal-map second
   (let ((input-tangle (node-content (first input-nodes)))
 	(input-signal-map (node-content (second input-nodes)))
 	(measured-qubit (ag-measurement-qubit operation)))
-    ;We return the new nodes in the same order
+					;We return the new nodes in the same order
     (list (make-data-node (make-tangle :qubits (remove measured-qubit
 						       (tangle-qubits input-tangle))))
 	  (make-data-node (make-signal-map :input-signals (signal-map-input-signals input-signal-map)
@@ -550,7 +550,7 @@ added to the list of output nodes on the graph, because corrections do not modif
 								  (signal-map-qubit-signals input-signal-map)))))))
 
 (defmethod make-output-nodes ((operation ag-correction) input-nodes)
-    ;We 'know' that input-nodes has a tangle in the first position
+					;We 'know' that input-nodes has a tangle in the first position
   (let ((input-tangle (node-content (first input-nodes))))
     (list (make-data-node (make-tangle :qubits (tangle-qubits input-tangle))))))
 
@@ -682,9 +682,9 @@ to a program graph"
   "Applies COMPILE-OPERATION to each operation in the sequence,
 growing the program-graph."
   (loop for operation in sequence
-     with program-graph = (make-empty-graph)
-     do (setf program-graph (compile-operation operation program-graph))
-     finally (return program-graph)))
+	with program-graph = (make-empty-graph)
+	do (setf program-graph (compile-operation operation program-graph))
+	finally (return program-graph)))
 
 (defun compile-operation (operation program-graph)
   "Applies MAKE-OPERATION-GRAPH to each operation in the sequence,
@@ -709,22 +709,36 @@ connections to the program graph."
   (declare (ignore graph))
   (let ((content (node-content node)))
     (typecase content
-      (tangle (format nil "Tangle { ~{~S ~}}" (tangle-qubits content)))
-      (ag-entanglement (format nil "Entangle (~A, ~A)"
-			       (ag-entanglement-qubit-1 content)
-			       (ag-entanglement-qubit-2 content)))
-      (ag-measurement (format nil "Measure ~A" 
-			      (ag-measurement-qubit content)))
+      (tangle (format nil "Tangle { ~{~S ~}}" 
+		      (tangle-qubits content)))
+      (ag-entanglement 
+       (format nil "Entangle (~A, ~A)"
+	       (ag-entanglement-qubit-1 content)
+	       (ag-entanglement-qubit-2 content)))
+      (ag-measurement 
+       (format nil "Measure ~A" 
+	       (ag-measurement-qubit content)))
       (ag-X-correction (format nil "X ~A" (ag-correction-qubit content)))
       (ag-Z-correction (format nil "Z ~A" (ag-correction-qubit content)))
       (kronecker-operation (format nil "Kronecker Product"))
+      ;;;; cnc nodes
+      (cnc-tangle (format nil "Tangle [ ~{~S ~}]" 
+			  (tangle-qubits (cnc-tangle-tangle content))))
+      (cnc-entanglement-operation 
+       (format nil "~A (~A, ~A)"
+	       (cnc-step-name (cnc-operation-step-kernel content)) 
+	       (cnc-entanglement-operation-qubit content)
+	       (cnc-entanglement-operation-qubit-2 content)))
+      (cnc-operation
+       (format nil "~A (~A)"
+	       (cnc-step-name (cnc-operation-step-kernel content)) 
+	       (cnc-operation-qubit content)))
       (otherwise (node-label node)))))
 
 (defun dot-node-shape (node graph)
   (typecase (node-content node)
-    (operation "ellipse")
-    (ag-operation "ellipse")
-    (tangle "rectangle")
+    ((or ag-operation operation cnc-operation) "ellipse")
+    ((or tangle cnc-tangle) "rectangle")
     (otherwise (cond ((member node (graph-input-nodes graph))
 		      "triangle")
 		     ((member node (graph-output-nodes graph))
@@ -739,17 +753,17 @@ connections to the program graph."
 		   :if-exists :supersede)
     (format dotfile "digraph {~%" )
     (loop for node in (graph-nodes graph)
-       do (format dotfile "\"~A\" [label=\"~A\",shape=~A];~%" 
-		  (node-label node) 
-		  (dot-node-label node graph)
-		  (dot-node-shape node graph)))
+	  do (format dotfile "\"~A\" [label=\"~A\",shape=~A];~%" 
+		     (node-label node) 
+		     (dot-node-label node graph)
+		     (dot-node-shape node graph)))
     (loop for node in (graph-nodes graph)
-       do (loop for child-node in (node-downstream-nodes node)
-	       do (format dotfile "\"~A\" -> \"~A\" [];~%" (node-label node) (node-label child-node))))
+	  do (loop for child-node in (node-downstream-nodes node)
+		   do (format dotfile "\"~A\" -> \"~A\" [];~%" (node-label node) (node-label child-node))))
     (format dotfile "}~%" )
     )
-  (format t "Dumped dot file in /tmp/graph.dot")
-  ; (sb-ext:run-program "/Applications/Graphviz.app/Contents/MacOS/Graphviz" (list "/tmp/graph.dot"))
+  (format t "Dumped dot file in /tmp/graph.dot~%")
+					; (sb-ext:run-program "/Applications/Graphviz.app/Contents/MacOS/Graphviz" (list "/tmp/graph.dot"))
   )
 
 
@@ -759,19 +773,19 @@ connections to the program graph."
 (defvar *test-1-result* 
   (list (make-AG-ENTANGLEMENT :QUBIT-1 2 :QUBIT-2 1)
 	(make-AG-MEASUREMENT
-	   :QUBIT 2
-	   :ANGLE 1.2533141373155001d0
-	   :S-SIGNAL (make-AG-SIGNAL :FLAG NIL :LOOKUP-FLAGS NIL :QUBIT-FLAGS '(3))
-	   :T-SIGNAL (make-AG-SIGNAL
-			:FLAG T
-			:LOOKUP-FLAGS '(BC A)
-			:QUBIT-FLAGS '(5 3 2)))
+	 :QUBIT 2
+	 :ANGLE 1.2533141373155001d0
+	 :S-SIGNAL (make-AG-SIGNAL :FLAG NIL :LOOKUP-FLAGS NIL :QUBIT-FLAGS '(3))
+	 :T-SIGNAL (make-AG-SIGNAL
+		    :FLAG T
+		    :LOOKUP-FLAGS '(BC A)
+		    :QUBIT-FLAGS '(5 3 2)))
 	(make-AG-X-CORRECTION
-	   :QUBIT 3
-	   :S-SIGNAL (make-AG-SIGNAL :FLAG NIL :LOOKUP-FLAGS NIL :QUBIT-FLAGS NIL))
+	 :QUBIT 3
+	 :S-SIGNAL (make-AG-SIGNAL :FLAG NIL :LOOKUP-FLAGS NIL :QUBIT-FLAGS NIL))
 	(make-AG-Z-CORRECTION
-	   :QUBIT 1
-	   :S-SIGNAL (make-AG-SIGNAL :FLAG NIL :LOOKUP-FLAGS NIL :QUBIT-FLAGS '(2)))))
+	 :QUBIT 1
+	 :S-SIGNAL (make-AG-SIGNAL :FLAG NIL :LOOKUP-FLAGS NIL :QUBIT-FLAGS '(2)))))
 
 (defun test-op-graph ()
   (make-operation-graph (make-ag-entanglement :qubit-1 2 :qubit-2 1) (list (make-data-node (make-tangle :qubits (list 2))) 
@@ -792,15 +806,15 @@ connections to the program graph."
 ;; (find-input-nodes (make-ag-entanglement :qubit-1 1 :qubit-2 3) (make-empty-graph))
 ;; (find-input-nodes (make-ag-entanglement :qubit-1 5 :qubit-2 2) (test-op-graph))
 
-;(compile-operation (make-ag-entanglement :qubit-1 2 :qubit-2 1) (make-empty-graph))
-;(show-dot (compile-operation (make-ag-entanglement :qubit-1 1 :qubit-2 6) (compile-operation (make-ag-entanglement :qubit-1 5 :qubit-2 6) (test-op-graph))))
-;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (M 1 0) (X 2 (q 1))))))
-;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3)))))
-;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5))))))))
-;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (X 4 )))))
-;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (Z 6 (q 3)) (X 4) ))))
-;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (Z 6 (q 3)) (X 4) (X 2 (q 1))))))
-;(test-all)
+					;(compile-operation (make-ag-entanglement :qubit-1 2 :qubit-2 1) (make-empty-graph))
+					;(show-dot (compile-operation (make-ag-entanglement :qubit-1 1 :qubit-2 6) (compile-operation (make-ag-entanglement :qubit-1 5 :qubit-2 6) (test-op-graph))))
+					;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (M 1 0) (X 2 (q 1))))))
+					;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3)))))
+					;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5))))))))
+					;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (X 4 )))))
+					;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (Z 6 (q 3)) (X 4) ))))
+					;(show-dot (compile-to-graph (parse-sequence '((E 1 2) (E 5 6) (E 3 4) (E 1 5) (E 6 3) (M 1 0) (M 5 pi) (M 3 (sqrt 2) (+ 1 a 1 bc (+ 1 (q 2) (q 5)))) (Z 6 (q 3)) (X 4) (X 2 (q 1))))))
+					;(test-all)
 
 ;; Real MC program, produces 3 W-entangled qubits
 (defvar *w3-program*
@@ -822,16 +836,16 @@ connections to the program graph."
 (defvar *short-w3-program*
   (reverse 
    `(     (M 17 0) (M 16 pi/2) (M 15 pi/4 (q 14)) (M 14 pi/2) (M 13 0)
-     (M 12 pi/2) (M 11 -pi/4)
-     (M 9 0) (M 8 0) (M 7 0) (M 5 0)
-     (M 4 pi/2) (M 3 (acos (sqrt (/ 2 3))) (+ (q 1) (q 2))) (M 2 pi/2) (M 1 0)
-     ,@(loop for i from 10 above 1 collect `(E ,(1- i) ,i))
-     ,@(loop for i from 18 above 11 collect `(E ,(1- i) ,i))        
-     (E 8 13) (E 9 18))))
+	  (M 12 pi/2) (M 11 -pi/4)
+	  (M 9 0) (M 8 0) (M 7 0) (M 5 0)
+	  (M 4 pi/2) (M 3 (acos (sqrt (/ 2 3))) (+ (q 1) (q 2))) (M 2 pi/2) (M 1 0)
+	  ,@(loop for i from 10 above 1 collect `(E ,(1- i) ,i))
+	  ,@(loop for i from 18 above 11 collect `(E ,(1- i) ,i))        
+	  (E 8 13) (E 9 18))))
 
-;(show-dot (compile-mc *w3-program*))
+					;(show-dot (compile-mc *w3-program*))
 
-;(show-dot (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1)))))
+					;(show-dot (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1)))))
 
 
 
@@ -847,33 +861,33 @@ connections to the program graph."
 	(swap-table (make-hash-table)))
     ;;  first pass: copy each node, ignore edges
     (loop
-       for node in (graph-nodes mc-graph)
-       for new-node = (expand-to-cnc-node node)
-       do (progn 
-	    (setf (gethash node swap-table) new-node)
-	    (add-node new-node cnc-graph))
-       when (input-node-p node mc-graph)
+      for node in (graph-nodes mc-graph)
+      for new-node = (expand-to-cnc-node node)
+      do (progn 
+	   (setf (gethash node swap-table) new-node)
+	   (add-node new-node cnc-graph))
+      when (input-node-p node mc-graph)
         do (add-input-node new-node cnc-graph)
-       when (output-node-p node mc-graph)
+      when (output-node-p node mc-graph)
         do (add-output-node new-node cnc-graph))
     ;;  second pass: swap the edges
     (loop for node in (graph-nodes cnc-graph)
-       do (setf (node-upstream-nodes node) 
-		(swap-nodes (node-upstream-nodes node) swap-table))
-       do (setf (node-downstream-nodes node) 
-		(swap-nodes (node-downstream-nodes node) swap-table)))
+	  do (setf (node-upstream-nodes node) 
+		   (swap-nodes (node-upstream-nodes node) swap-table))
+	  do (setf (node-downstream-nodes node) 
+		   (swap-nodes (node-downstream-nodes node) swap-table)))
     ;;  third pass: instantiate the content (uses info from edges)
     (loop
-       for node in (graph-nodes cnc-graph)
-	 do (instantiate-node-content (node-content node) node cnc-graph))
+      for node in (graph-nodes cnc-graph)
+      do (instantiate-node-content (node-content node) node cnc-graph))
     cnc-graph
     ))
 
 (defun swap-nodes (node-list swap-table)
   (loop for node in node-list
-       collecting (if-let ((swapped (gethash node swap-table)))
-		    swapped
-		    node)))
+	collecting (if-let ((swapped (gethash node swap-table)))
+			   swapped
+			   node)))
 
 (defgeneric expand-to-cnc-node (node))
 
@@ -883,7 +897,7 @@ connections to the program graph."
 			     :downstream-nodes (node-downstream-nodes node))))
     new-node))
 
-;(pprint (mc-graph-to-cnc-graph (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1))))))
+					;(pprint (mc-graph-to-cnc-graph (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1))))))
 
 
 (defstruct cnc-tangle
@@ -935,17 +949,17 @@ connections to the program graph."
 
 (defstruct (cnc-correction-operation (:include cnc-operation))
   signal
-)
+  )
 
 (defstruct item-collection
   name
   (type "amplitude"
-	:type string))
+   :type string))
 
 (defstruct tag-collection
   (name (symbol-to-string (gensym "tag_")) :type string)
   (type "unsigned int" 
-	:type string))
+   :type string))
 
 ;; ;;;; CNC-OPERATION-STEPS
 
@@ -991,16 +1005,16 @@ connections to the program graph."
 (defun get-cnc-tangle (nodes)
   (if-let ((node (find-if #'cnc-tangle-p nodes
 			  :key #'node-content)))
-    (node-content node)))
+	  (node-content node)))
 
 (defun get-cnc-tangles (nodes)
   (if-let ((node-list (remove-if-not #'cnc-tangle-p (mapcar #'node-content nodes))))
-    node-list))
+	  node-list))
 
 (defun get-cnc-signals (nodes)
   (if-let ((node (find-if #'cnc-signal-p nodes
 			  :key #'node-content)))
-    (node-content node)))
+	  (node-content node)))
 
 ;;;; CHANGE-NODE-CONTENT
 
@@ -1087,7 +1101,24 @@ connections to the program graph."
 			(list (item-collection-name output-item-collection) 
 			      (tag-collection-name output-tag-collection))
 					; params: size qid
-			(mapcar #'number-to-string (list size qubit-index))))))
+			(mapcar #'number-to-string (list size
+  qubit-index))))))
+
+
+(defmethod instantiate-node-content ((operation cnc-correction-operation) node cnc-graph)
+  (with-slots (step-kernel input-item-collection output-item-collection output-tag-collection signal-item-collection qubit-index size)
+      operation
+    (setf step-kernel
+	  (apply-kernel step-kernel
+					; input: tangle, signal
+			(list (item-collection-name input-item-collection)
+			      (item-collection-name signal-item-collection))  
+					; output: tangle, tag
+			(list (item-collection-name output-item-collection) 
+			      (tag-collection-name output-tag-collection))
+					; params: size qid
+			(mapcar #'number-to-string (list size
+							 qubit-index))))))
 
 (defmethod instantiate-node-content ((operation cnc-entanglement-operation) node cnc-graph)
   (with-slots (step-kernel input-item-collection output-item-collection output-tag-collection 
@@ -1106,16 +1137,16 @@ connections to the program graph."
 					    (tag-collection-name output-tag-collection))
 					; params: size qid qid-2
 				      params)
-	   ;; tuner-name "e_tuner"
-	   ;; tuner-args (append params (list (item-collection-name input-item-collection)))
+	    ;; tuner-name "e_tuner"
+	    ;; tuner-args (append params (list (item-collection-name input-item-collection)))
 	    ))))
 
 (defmethod instantiate-node-content ((operation cnc-kronecker-operation) node cnc-graph)
   (with-slots (step-kernel input-item-collection input-tag-collection
-			   input2-item-collection input2-tag-collection 
-			   output-item-collection output-tag-collection 
-			   size size-2
-			   tuner-name tuner-args)
+	       input2-item-collection input2-tag-collection 
+	       output-item-collection output-tag-collection 
+	       size size-2
+	       tuner-name tuner-args)
       operation
     (assert (= (list-length (get-cnc-tangles (node-upstream-nodes node)))
 	       2))
@@ -1144,7 +1175,7 @@ connections to the program graph."
   ;; the operation step kernel performs the M operation, but there is a second step 'check-M' that needs to be introduced
   (with-slots (check-step-kernel step-kernel input-item-collection output-item-collection output-tag-collection 
 	       signal-item-collection qubit-index size do-m-tag-collection
-	       tuner-name tuner-args)
+	       tuner-name tuner-args angle)
       operation
     (setf check-step-kernel
 					; (in_tangle signals) 
@@ -1162,7 +1193,7 @@ connections to the program graph."
 					; params: qid
 			(mapcar #'number-to-string (list qubit-index))))    
     ;; this will apply the M operation kernel
-    ;;   (in_tangle) (out_tangle out_tags) (size qid)
+    ;;   (in_tangle) (out_tangle out_tags) (size qid agle)
     (setf step-kernel
 	  (apply-kernel step-kernel
 					; input: tangle
@@ -1170,8 +1201,10 @@ connections to the program graph."
 					; output: tangle, tag
 			(list (item-collection-name output-item-collection) 
 			      (tag-collection-name output-tag-collection))
-					; params: size qid
-			(mapcar #'number-to-string (list size qubit-index))))
+					; params: size qid angle
+			(list (number-to-string size)
+			      (number-to-string qubit-index)
+			      (format nil "~F" angle))))
     (setf tuner-name "m_tuner"
 	  tuner-args (list (number-to-string size)
 			   (number-to-string qubit-index)
@@ -1251,35 +1284,35 @@ connections to the program graph."
 
 (defun construct-cnc-program-from-graph (cnc-graph)
   (loop
-     for node in (graph-nodes cnc-graph)
-     for node-content = (node-content node)
-     for node-prescriptions = (cnc-node-prescriptions node-content node)
-     appending node-prescriptions into prescriptions
- ;; currently adding a single [int signals <bool>] collection in the
+    for node in (graph-nodes cnc-graph)
+    for node-content = (node-content node)
+    for node-prescriptions = (cnc-node-prescriptions node-content node)
+    appending node-prescriptions into prescriptions
+    ;; currently adding a single [int signals <bool>] collection in the
     ;; generator itself when (cnc-operation-p (node-content node)) do
     ;; (pushnew (cnc-operation-signal-item-collection (node-content
     ;; node)) items)
     
-     when (cnc-tangle-p node-content)
-       collect (cnc-tangle-item-collection node-content) 
-         into items
-       and
-       collect (cnc-tangle-size node-content)
-         into item-sizes
-     when (cnc-input-tangle-p node-content)
-       collect (cnc-input-tangle-generator-tag-collection node-content)
-         into generator-tag-collections
-     when (cnc-kronecker-operation-p node-content)
-       collect (tag-collection-name (cnc-kronecker-operation-input2-tag-collection node-content))
-         into dangling-tag-names
-     ;; adding tuners
-     when (and (cnc-operation-p node-content)
-	       (cnc-operation-tuner-name node-content))
-     collect (cons (symbol-name (cnc-step-name (cnc-operation-step-kernel node-content)))
-		   (cons  (cnc-operation-tuner-name node-content)
-			  (cnc-operation-tuner-args node-content)))
-       into tuned-steps
-     finally
+    when (cnc-tangle-p node-content)
+      collect (cnc-tangle-item-collection node-content) 
+	into items
+	and
+	  collect (cnc-tangle-size node-content)
+	    into item-sizes
+    when (cnc-input-tangle-p node-content)
+      collect (cnc-input-tangle-generator-tag-collection node-content)
+	into generator-tag-collections
+    when (cnc-kronecker-operation-p node-content)
+      collect (tag-collection-name (cnc-kronecker-operation-input2-tag-collection node-content))
+	into dangling-tag-names
+    ;; adding tuners
+    when (and (cnc-operation-p node-content)
+	      (cnc-operation-tuner-name node-content))
+      collect (cons (symbol-name (cnc-step-name (cnc-operation-step-kernel node-content)))
+		    (cons  (cnc-operation-tuner-name node-content)
+			   (cnc-operation-tuner-args node-content)))
+	into tuned-steps
+    finally
        (let* ((steps       (mapcar #'car prescriptions))
 	      (tag-names   (mapcar (compose #'tag-collection-name #'cdr) prescriptions))
 	      (step-names  (mapcar (compose #'symbol-name #'cnc-step-name) steps))
@@ -1355,7 +1388,7 @@ connections to the program graph."
 
 
 (defkernel E (in_items) (out_items out_tags) (size qid_1 qid_2)
-"
+  "
 amplitude a_i;
 const int i = t;
 if (`qid_2` > `qid_1`) { printf(\"WARNING: qid2 > qid1\\n\"); }
@@ -1370,44 +1403,50 @@ c.`out_items`.put( i , a_i );
 c.`out_tags`.put( i );
 ")
 
-(defkernel X (in_tangle) (out_tangle out_tags) (size qid)
-"
+(defkernel X (in_tangle signals) (out_tangle out_tags) (size qid)
+  "
 amplitude a_i;
 const int i = t;
 const int m = `qid`;
 const int n = `size` / `qid`;
+bool signal=true;
 
 c.`in_tangle`.get( i , a_i );
+//c.`signals`.get( `qid`, signal );
 
-const int f_i = permute( i , n, m );
-
-const int f_target_index = f_i ^ 1;
-const int target_index = permute( f_target_index , m , n );
+//const int f_i = permute( i , n, m );
+//const int f_target_index = f_i ^ 1;
+//const int target_index = permute( f_target_index , m , n );
+const int target_index = 
+  signal ? permute( permute(i, n, m)^1, m, n )
+         : i;
 
 c.`out_tangle`.put( target_index , a_i , 1 );
 c.`out_tags`.put( target_index );
 ")
 
-(defkernel Z (in_tangle) (out_tangle out_tags) (size qid)
-"
+(defkernel Z (in_tangle signals) (out_tangle out_tags) (size qid)
+  "
 amplitude a_i;
 const int i = t;
 const int m = `qid`;
 const int n = `size` / `qid`;
+bool signal=true;
 
 c.`in_tangle`.get( i , a_i );
-
+//c.`signals`.get( `qid`, signal);
 const int f_i = permute( i , n, m );
 
-if (f_i % 2)
-  a_i = -a_i;
+if( signal )
+  if (f_i % 2)
+    a_i = -a_i;
 
 c.`out_tangle`.put( i , a_i , 1);
 c.`out_tags`.put( i );
 ")
 
-(defkernel M (in_tangle) (out_tangle out_tags) (size qid)
-"
+(defkernel M (in_tangle) (out_tangle out_tags) (size qid angle)
+  "
 amplitude a_i1;
 amplitude a_i2;
 const unsigned int i = t;
@@ -1415,15 +1454,15 @@ const unsigned int m = `qid`;
 //const unsigned int n = `size` / `qid`;
 //const unsigned int f_i = permute( i , m , n );
 //const double pi = 3.14159265;
-const double alpha = 0;  // alpha is normally a param, constant for now
-const amplitude phi_0 = sqrt(2);
-const amplitude phi_1 = exp(alpha) * sqrt(2); // normally should be -ia (complex)
+//const amplitude phi_0 = 1;
+const double angle = `angle`;
+const amplitude phi_1 = std::exp(amplitude(0,-angle));
 
 if ( (i & m) == 0 ) {
   const unsigned int i2 = i + m;
   c.`in_tangle`.get( i  , a_i1 );
   c.`in_tangle`.get( i2 , a_i2 );
-  const amplitude new_amp = a_i1 * phi_0 + a_i2 * phi_1;
+  const amplitude new_amp = a_i1 - a_i2 * phi_1;
   const unsigned new_index = compact_bit_index(i,m);
   c.`out_tangle`.put( new_index , new_amp , 1);
   c.`out_tags`.put( new_index );
@@ -1432,41 +1471,33 @@ if ( (i & m) == 0 ) {
 
 #|
 if ((f_i % 2) == 0) {
-  const unsigned int i2 = permute( f_i^1 , m , n );
-  const unsigned int new_index = permute( f_i/2 , m , n );
-  // phi's will depend on the angle of measurement
-  const amplitude phi_1 = 0;
-  const amplitude phi_2 = 1;
-  c.`in_tangle`.get( i  , a_i1 );
-  c.`in_tangle`.get( i2 , a_i2 );
-  // normally apply factor to i1 and i2 here, skipping this for now 
-  c.`out_tangle`.put( new_index , a_i1 * phi_1 + a_i2 * phi_2 , 1);
-  c.`out_tags`.put( new_index );
+const unsigned int i2 = permute( f_i^1 , m , n );
+const unsigned int new_index = permute( f_i/2 , m , n );
+// phi's will depend on the angle of measurement
+const amplitude phi_1 = 0;
+const amplitude phi_2 = 1;
+c.`in_tangle`.get( i  , a_i1 );
+c.`in_tangle`.get( i2 , a_i2 );
+// normally apply factor to i1 and i2 here, skipping this for now 
+c.`out_tangle`.put( new_index , a_i1 * phi_1 + a_i2 * phi_2 , 1);
+c.`out_tags`.put( new_index );
 }
 |#
 
-;(defkernel merge_M (in_tangle) (out_tangle out_tags) (size qid))
+					
 
 (defkernel check_M (in_tangle signals) (do_m_tags out_tangle out_tags signals) (qid)
-"
+  "
 amplitude amp;
   // shortcut: lets say measurement always returns 1;
 bool measurement_result = true;
-if (measurement_result) {
-  //c.`signals`.put(t,true);
+  //c.`signals`.put(t,measurement_result);
   c.`do_m_tags`.put(t); // lets do the measurement
-}
-else {
-  c.`in_tangle`.get(t,amp); // proceed with the next computation
-  //c.`signals`.put(t,false);
-  c.`out_tangle`.put( t , amp , 1 );
-  c.`out_tags`.put(t);
-}
 "
-)
+  )
 
 (defkernel gen_tangle () (tangle tags) (size)
-"
+  "
 const amplitude amp( 1.0/`size` );
 for(int i(0);i<`size`;++i) {
   c.`tangle`.put( i , amp );
@@ -1475,14 +1506,14 @@ for(int i(0);i<`size`;++i) {
 ")
 
 (defkernel output_tangle (tangle) () (size)
-"
+  "
 amplitude amp;
 c.`tangle`.get(t,amp);
-printf(\"`tangle` %d: %1.4f\\n\",t,amp);
+printf(\"`tangle` %d: (%1.4f,%1.4f) \\n\",t,amp.real(),amp.imag());
 ")
 
 (defkernel kron (tangle-1 tangle-2) (tangle-out tag-out) (size-2)
-"
+  "
 amplitude amp_1;
 amplitude amps[`size-2`];
 
@@ -1531,10 +1562,10 @@ for(int i(0);i<`size-2`;++i) {
 
 (defun replace-all-matching-pairs (match-replace-pairs target-string)
   (loop 
-     for (match . replace) in match-replace-pairs
-     for replaced = (replace-all-matching match target-string replace)
-     then (replace-all-matching match replaced replace)
-     finally (return replaced)))
+    for (match . replace) in match-replace-pairs
+    for replaced = (replace-all-matching match target-string replace)
+      then (replace-all-matching match replaced replace)
+    finally (return replaced)))
 
 (defun number-to-string (num)
   (format nil "~A" num))
@@ -1563,56 +1594,56 @@ for(int i(0);i<`size-2`;++i) {
   tuned-steps)
 
 #+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1))))))
-       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
-       )
-;  (pprint cnc-program)
-  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
-      cnc-program
-    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
+	    (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+	    )
+					;  (pprint cnc-program)
+       (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+	   cnc-program
+	 (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
 
 #+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc '((E 1 2) (M 1 0)))))
-       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
-       )
-;  (pprint cnc-program)
-  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
-      cnc-program
-    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
+	    (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+	    )
+					;  (pprint cnc-program)
+       (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+	   cnc-program
+	 (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
 
 #+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc *short-w3-program*)))
-       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
-       )
-;  (pprint cnc-program)
-  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
-      cnc-program
-    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
+	    (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+	    )
+					;  (pprint cnc-program)
+       (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+	   cnc-program
+	 (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
 
 
 
 #+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc *w3-program*)))
-       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
-       )
-;  (pprint cnc-program)
-  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
-      cnc-program
-    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
+	    (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+	    )
+					;  (pprint cnc-program)
+       (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+	   cnc-program
+	 (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
 
-;(show-dot (compile-mc *w3-program*))
+					;(show-dot (compile-mc *w3-program*))
 
 #+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc '((E 0 1) (E 1 2) (E 3 4) (E 9 10) (E 11 12) (M 0 0) (M 1 0) (X 2 (q 1))))))
-       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
-       )
-;  (pprint cnc-program)
-  (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
-      cnc-program
-    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
+	    (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+	    )
+					;  (pprint cnc-program)
+       (with-slots (items tags step-names step-bodies input-tags prescriptions tuned-steps)
+	   cnc-program
+	 (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps)))
 
 #+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc '((E 1 2) (E 2 3)))))
-       (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
-       )
-;  (pprint cnc-program)
-  (with-slots (items tags step-names step-bodies input-tags prescriptions)
-      cnc-program
-    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions)))
+	    (cnc-program (construct-cnc-program-from-graph g))  ; 'flatten' graph
+	    )
+					;  (pprint cnc-program)
+       (with-slots (items tags step-names step-bodies input-tags prescriptions)
+	   cnc-program
+	 (cnc-gen:build items tags step-names step-bodies input-tags prescriptions)))
 
 (defun mc-read-compile ()
   (sb-sys:enable-interrupt sb-unix:sigint #'(lambda () (sb-ext:quit)))
@@ -1621,8 +1652,10 @@ for(int i(0);i<`size-2`;++i) {
   (let ((mc-program (read *standard-input* nil)))
     (format t "Generating MC program graph... ")
     (let ((mc-graph (compile-mc mc-program)))
+;      (show-dot mc-graph)
       (format t "done~%Generating CnC-specific graph... ")
       (let ((g (mc-graph-to-cnc-graph mc-graph)))
+	(show-dot g)
 	(format t "done~%Collecting data for CnC code generation... ")
 	(let ((cnc-program (construct-cnc-program-from-graph g)))
 	  (with-slots (items item-sizes tags step-names step-bodies input-tags prescriptions tuned-steps)

@@ -64,10 +64,14 @@
 #ifndef INCLUDED_MCCOMPILED_H
 #define INCLUDED_MCCOMPILED_H
 
+#include <complex>
+#include <stdlib.h>
+#include <unistd.h>
+
 #include <cnc/cnc.h>
 #include <cnc/debug.h>
 
-typedef double amplitude;
+typedef std::complex<double> amplitude;
 
 struct context;
 ")
@@ -275,27 +279,49 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
 
 (defun generate-main-source (item-names step-names input-tag-names)
   (line "int main(int argc, char* argv[]) {")
-  (indented 
-    (line "if (argc == 3) { CnC::debug::set_num_threads( atoi( argv[2] ) ); }")
+  (indented
+       (line "opterr = 0;")
+       (line "int debug_level=0;")
+       (line "int threads=0;")
+       (line "int c; 
+while ((c = getopt (argc, argv, \"dt:\")) != -1)
+  switch (c) {
+    case 't':
+      threads = atoi(optarg);
+      break;
+    case 'd':
+      debug_level = 1;
+      break;
+    case '?':
+          if (optopt == 't')
+               fprintf (stderr, \"Option -%c requires an argument.\\n\", optopt);
+             else if (isprint (optopt))
+               fprintf (stderr, \"Unknown option `-%c'.\\n\", optopt);
+             else
+               fprintf (stderr,
+                        \"Unknown option character `\\\\x%x'.\\n\",
+                        optopt);
+             return 1;
+           default:
+             abort ();
+  }")
+ 
+    (line "if (threads>0) { CnC::debug::set_num_threads( threads ); }")
 
     (line "context ctx;")
 
     ;; debug
 ;      (line "CnC::debug::trace_all(ctx, \"context\");")
-    (line "switch (argc) {")
-    (indented
-      (line "case 2: if (atoi(argv[1]) != 0) { ")
+
+    (line "if (debug_level) { ")
       (indented
-	(line "CnC::debug::collect_scheduler_statistics(ctx);")
-	(lines "CnC::debug::trace( ~A(), \"~A\" );" step-names step-names)
-	(line "if (atoi(argv[1]) == 1) {" )
-	(indented 
-	  (lines "CnC::debug::trace( ctx.~A, \"~A\");" item-names item-names))
-	(line "}"))
-      (line "} break;"))
+    	(line "CnC::debug::collect_scheduler_statistics(ctx);")
+	(line "CnC::debug::trace( ctx.signals, \"signals\" );")
+    	(lines "CnC::debug::trace( ~A(), \"~A\" );" step-names step-names)
+    	(lines "CnC::debug::trace( ctx.~A, \"~A\");" item-names item-names))
     (line "}~%")
  
-    ;; insert code that fulls the right tag and item collections with elements
+    ;; insert code that fills the right tag and item collections with elements
     (lines "ctx.~A.put(0);" input-tag-names)
 
     (line "ctx.wait();")

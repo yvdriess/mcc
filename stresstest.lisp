@@ -79,7 +79,6 @@ struct context;
   (line "~%struct context: public CnC::context< context > {~%")
   (indented
     (lines "CnC::item_collection< int, int > ~A;" item-names)
-    (line "CnC::item_collection< int, bool > signals;")
     (lines "CnC::tag_collection< int > ~A;" tag-names)
     (line "context(): ")
     (indented 
@@ -100,7 +99,7 @@ struct context;
 (defun generate-main-source (input-tag-names)
   (line "int main(int argc, char* argv[]) {")
   (indented
-    (line "const int elements = argc>1 ? argv[1] : 32")
+    (line "const int elements = argc>1 ? atoi(argv[1]) : 16;")
     (line "context ctx;")
     ;; insert code that fills the right tag and item collections with elements
     (lines "ctx.~A.put(elements);" input-tag-names)
@@ -217,16 +216,17 @@ for(int i=0;i<~d; ++i) {
 			     collect (cons (format nil "step_~d" i)
 					   (format nil "tags_~d" i)))))
     (build item-names
-	   tag-names
+	   (append tag-names (list "source_tags"))
 	   (append step-names
 		   (list "source" "sink"))
 	   (append step-bodies
 		   (list (source-body size)
 			 (sink-body depth size)))
-	   (list "source")
+	   (list "source_tags")
 	   (append prescriptions
 		   (list (cons "sink" 
 			       (format nil "tags_~d" depth)))))
 ))
 
-(generate-depth-stresstest 3)
+;(generate-depth-stresstest 300)
+

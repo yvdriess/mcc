@@ -13,19 +13,19 @@ endif
 
 CPPFLAGS := -Wall -O2 #-g3 -pg 
 
-SOURCES := mccompiled.C
+SOURCES := stresstest.C
 
-TARGETS := mccompiled
+TARGETS := stresstest
 
-HEADERS := mccompiled.h
+HEADERS := stresstest.h
 
 DEST_OBJS=$(SOURCES:.C=.o)
 
 #OPT := -O2
 
-all:  mccompiled
+all:  stresstest
 
-mccompiled: $(DEST_OBJS)
+stresstest: $(DEST_OBJS)
 	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lcnc -ltbb -ltbbmalloc 
 
 %.o: %.C %.h

@@ -140,7 +140,7 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 
 
 (defun no-more-args-p (arg-lists)
-  "Returns T if any of the supplied arg-lists contained an empty argument listj, nil (nil))"
+  "Returns T if any of the supplied arg-lists contained an empty argument list, nil (nil))"
   (or (null arg-lists)
       (some #'null arg-lists)
       (some #'null
@@ -156,8 +156,8 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
      do (terpri *line-stream*))
   *line-stream*)
 
-(defmacro newline ()
-()  `(progn (terpri *line-stream*)
+(defmacro newline ()  
+  `(progn (terpri *line-stream*)
 	  *line-stream*))
 
 ;; (defun generate-start-input (tag-collection)

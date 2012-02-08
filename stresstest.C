@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "mccompiled.h"
+#include "stresstest.h"
 
 int main(int argc, char* argv[]) {
   const int elements = argc>1 ? argv[1] : 32

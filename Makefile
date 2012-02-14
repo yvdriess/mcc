@@ -1,8 +1,9 @@
 ARCH := intel64
-#M_UNAME := $(shell uname -m)
-#ifeq ($(M_UNAME), i686)
-#ARCH := ia32
-#endif
+LANG = C
+M_UNAME := $(shell uname -m)
+ifeq ($(M_UNAME), i686)
+ARCH := ia32
+endif
 
 ifeq (,$(CNC_INSTALL_DIR))
 $(info Please estblish CnC environment variables before using this Makefile.)
@@ -11,7 +12,7 @@ $(info More information is available in 'Getting Started > Running the samples')
 $(error CNC_INSTALL_DIR is not set)
 endif
 
-CPPFLAGS := -Wall -O2 #-g3 -pg 
+CPPFLAGS := -O2 #-Wall -O2 #-g3 -pg 
 
 SOURCES := mccompiled.C
 
@@ -26,10 +27,15 @@ DEST_OBJS=$(SOURCES:.C=.o)
 all:  mccompiled
 
 mccompiled: $(DEST_OBJS)
-	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lcnc -ltbb -ltbbmalloc 
+	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lrt -lcnc -ltbb -ltbbmalloc 
 
 %.o: %.C %.h
 	$(CXX) $(CPPFLAGS) -c -I$(CNC_INSTALL_DIR)/include -o $@ $<
 
 clean:
 	rm -f $(TARGETS) $(DEST_OBJS)
+
+tarball: $(TARGETS)
+	mkdir -p mcc_specimen/
+	cp Makefile mccompiled.C mccompiled.h mcc_specimen/
+	tar cvfz mcc_specimen.tgz mcc_specimen/

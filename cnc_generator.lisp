@@ -105,7 +105,7 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
   (defvar *indentation* 0)
   (defvar *seperator* "")
   (defvar *line-stream* t)
-  (defvar *filename* "mccompiled")
+  (defvar *header-name* "mccompiled")
 
 (defun symbol-to-string (sym)
   (string-downcase (symbol-name sym)))
@@ -140,7 +140,7 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 
 
 (defun no-more-args-p (arg-lists)
-  "Returns T if any of the supplied arg-lists contained an empty argument listj, nil (nil))"
+  "Returns T if any of the supplied arg-lists contained an empty argument list, nil (nil))"
   (or (null arg-lists)
       (some #'null arg-lists)
       (some #'null
@@ -157,7 +157,7 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
   *line-stream*)
 
 (defmacro newline ()
-()  `(progn (terpri *line-stream*)
+  `(progn (terpri *line-stream*)
 	  *line-stream*))
 
 ;; (defun generate-start-input (tag-collection)
@@ -170,99 +170,128 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 
 
 (defun declare-tuners ()
-  (line "
-struct context;
+  ;; (line "
+;; struct context;
 
-struct kron_tuner : public CnC::default_tuner< int, context >
-{
-   kron_tuner(const unsigned int size2,
-              CnC::item_collection< int, amplitude > &input): size2(size2), input(input) {}
-   const unsigned int size2;
-   CnC::item_collection< int, amplitude > &input;
+;; struct kron_tuner : public CnC::step_tuner<>
+;; {
+;;    kron_tuner(const unsigned int size2,
+;;               CnC::item_collection< int, amplitude > &input): size2(size2), input(input) {}
+;;    const unsigned int size2;
+;;    CnC::item_collection< int, amplitude > &input;
 
-  template< class dependency_consumer >
-    void depends( const int & tag, context & c, dependency_consumer & dC ) const;
-};
+;;   template< class dependency_consumer >
+;;     void depends( const int & tag, context & c, dependency_consumer & dC ) const;
+;; };
 
-struct m_tuner : public CnC::default_tuner< int, context >
-{
-   m_tuner(const unsigned int size,
-           const unsigned int qid,
-           CnC::item_collection< int, amplitude > &input): 
-        size(size), qid(qid), input(input) {}
-   const unsigned int size;
-   const unsigned int qid;
-   CnC::item_collection< int, amplitude > &input;
+;; struct m_tuner : public CnC::step_tuner< int, context >
+;; {
+;;    m_tuner(const unsigned int size,
+;;            const unsigned int qid,
+;;            CnC::item_collection< int, amplitude > &input): 
+;;         size(size), qid(qid), input(input) {}
+;;    const unsigned int size;
+;;    const unsigned int qid;
+;;    CnC::item_collection< int, amplitude > &input;
 
-  template< class dependency_consumer >
-    void depends( const int & tag, context & c, dependency_consumer & dC ) const;
-};
-"))
+;;   template< class dependency_consumer >
+;;     void depends( const int & tag, context & c, dependency_consumer & dC ) const;
+;; };
+;; ")
+  )
 
 (defun define-tuners ()
-  (line "
-template< class dependency_consumer >
-void kron_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
-{
-  for(unsigned int i(0);i<size2;++i) {
-    dC.depends( input , i );
-  }
-}
+  ;; (line "
+;; template< class dependency_consumer >
+;; void kron_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
+;; {
+;;   for(unsigned int i(0);i<size2;++i) {
+;;     dC.depends( input , i );
+;;   }
+;; }
 
-template< class dependency_consumer >
-void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
-{
-  if ( (tag & qid) == 0 ) {
-    dC.depends( input , tag );
-    dC.depends( input , tag + qid);
-  }
-}
-"))
+;; template< class dependency_consumer >
+;; void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
+;; {
+;;   if ( (tag & qid) == 0 ) {
+;;     dC.depends( input , tag );
+;;     dC.depends( input , tag + qid);
+;;   }
+;; }
+;; ")
+  )
 
 
 (defun generate-step-header (step-name)
-  (line "~%struct ~A {" step-name)
+  (line "~%struct step_~A {" step-name)
   (indented 
     (line "int execute( const int& t, context& c ) const;"))
   (line "};"))
 
-(defun generate-context-header (item-names tag-names prescriptions tuned-steps item-sizes)
+(defun generate-context-header (step-names item-names tag-names
+				item-sizes tuned-tags)
   (line "~%struct context: public CnC::context< context > {~%")
   (indented
-    (lines "CnC::item_collection< int, amplitude > ~A; // SIZE=~A" item-names item-sizes)
-    (line "CnC::item_collection< int, bool > signals;")
-    (lines "CnC::tag_collection< int > ~A;" tag-names)
-    (line "context(): ")
+    ;; (loop for step in step-names
+    ;; 	  for tuned = (assoc step tuned-steps)
+    ;; 	  if tuned
+    ;; 	    do (line "CnC::step_collection< step_~A, ~A > ~A "
+    ;; 		     step (cadr step)))
+    (lines "CnC::step_collection< step_~A > ~A;" step-names step-names)
+    (lines "CnC::item_collection< int, amplitude > ~A; // SIZE=~A" 
+	   item-names item-sizes)
+    (line  "CnC::item_collection< int, bool > signals;")
+    (loop for tag-collection in tag-names
+	  for tuned = (assoc tag-collection tuned-tags)
+	  if tuned
+	    do (line "CnC::tag_collection< int, CnC::tag_tuner< tbb::blocked_range< int > > > ~A;"
+		     tag-collection)
+	  else do (line "CnC::tag_collection< int > ~A;" tag-collection))
+;    (lines "CnC::tag_collection< int > ~A;" tag-names)
+    (line  "context();")
+    )
+  (line "};~%"))
+
+(defun generate-context-constructor-source (item-names tag-names step-names
+					    prescriptions consumes produces)
+  (line "context::context(): ")
     (indented 
       (line "CnC::context< context >(),")
-      (lines "~A( this )," item-names)
-      (line "signals( this ),")
+      (lines "~A( *this , \"~A\" )," step-names step-names)
+      (lines "~A( *this )," item-names)
+      (line "signals( *this, \"signals\" ),")
       (comma-seperated
-	(lines "~A( this , false )" tag-names))
+	(lines "~A( *this , \"~A\" )" tag-names tag-names))
       (indented
 	(line "{")
 	(indented
-	  (loop for entry in prescriptions
-	     for tuned = (assoc (car entry) tuned-steps)
-	     if tuned
-							   ; this is
-							   ; hidious!
-	       do (line "prescribe( ~A , ~A() , ~A(~{ ~A ~^,~}) );" 
-			(cdr entry) (car entry) (cadr tuned) (cddr tuned))
-	     else do (line "prescribe( ~A , ~A() );" (cdr entry) (car entry)))
-	  #+nil(lines "prescribe( ~A, ~A() );"
-		 (mapcar #'cdr prescriptions)
-		 (mapcar #'car prescriptions))
+	  (lines "~A.prescribes( ~A, *this );"
+		 (mapcar #'car prescriptions)
+		 (mapcar #'cdr prescriptions))
+	  (lines "~A.consumes( ~A );"
+		 (mapcar #'car consumes)
+		 (mapcar #'cdr consumes))
+	  (lines "~A.produces( ~A );"
+		 (mapcar #'car produces)
+		 (mapcar #'cdr produces))
+	  
+	  ;; (loop for entry in prescriptions
+	  ;;    for tuned = (assoc (car entry) tuned-steps)
+	  ;;    if tuned
+	  ;; 						   ; this is
+	  ;; 						   ; hidious!
+	  ;;      do (line "prescribe( ~A , ~A() , ~A(~{ ~A ~^,~}) );" 
+	  ;; 		(cdr entry) (car entry) (cadr tuned) (cddr tuned))
+	  ;;    else do (line "prescribe( ~A , ~A() );" (cdr entry) (car entry)))
+	  
 ;	  (lines "~A.put(0);" input-tag-names)
 	  )
-	(line "}~%"))))
-  (line "};~%"))
+	(line "}~%")))
+)
 
 (defun generate-header (item-names 
 			tag-names 
 			step-names
-			prescriptions
-			tuned-steps
 			item-sizes)
   ;; preamble
   (line #.*MIT-license*)
@@ -272,9 +301,9 @@ void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) 
   (line *source-permute-function*)
   (line *source-tensor-permute-function*)
   (line *source-compact-index-function*)
-  (declare-tuners)
-  (generate-context-header item-names tag-names prescriptions tuned-steps item-sizes)
-  (define-tuners)
+;  (declare-tuners)
+  (generate-context-header step-names item-names tag-names item-sizes)
+ ; (define-tuners)
   (line "#endif"))
 
 (defun generate-main-source (item-names step-names input-tag-names)
@@ -316,9 +345,9 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
     (line "if (debug_level) { ")
       (indented
     	(line "CnC::debug::collect_scheduler_statistics(ctx);")
-	(line "CnC::debug::trace( ctx.signals, \"signals\" );")
-    	(lines "CnC::debug::trace( ~A(), \"~A\" );" step-names step-names)
-    	(lines "CnC::debug::trace( ctx.~A, \"~A\");" item-names item-names))
+	(line "CnC::debug::trace( ctx.signals );")
+    	(lines "CnC::debug::trace( ctx.~A );" step-names)
+    	(lines "CnC::debug::trace( ctx.~A );" item-names))
     (line "}~%")
  
     ;; insert code that fills the right tag and item collections with elements
@@ -330,21 +359,24 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
   (line "}~%"))
 
 (defun generate-step-source (step-name step-body)
-  (line "int ~A::execute(const int & t, context & c ) const {" step-name)
+  (line "int step_~A::execute(const int & t, context & c ) const {" step-name)
   ;; insert step logic here
   (indented 
     (line step-body)
     (line "return CnC::CNC_Success;"))
   (line "}~%"))
 
-(defun generate-source (step-names step-bodies item-names input-tag-names)
+(defun generate-source (step-names step-bodies item-names
+			input-tag-names tag-names prescriptions consumes produces)
   (line #.*MIT-license*)
   (line "#include <stdio.h>")
   (line "#include <stdlib.h>")
-  (line "#include \"~A.h\"~%" *filename*)
+  (line "#include \"~A.h\"~%" *header-name*)
   (generate-main-source item-names step-names input-tag-names)
 ;  (line *source-permute-function*)
 ;  (line *source-tensor-permute-function*)
+  (generate-context-constructor-source item-names tag-names step-names
+				       prescriptions consumes produces)
   (mapcar #'generate-step-source step-names step-bodies)
   )
 
@@ -390,7 +422,8 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 ;;     (generate-source steps)))
 
 (defun build (item-names tag-names step-names step-bodies 
-	      input-tag-names prescriptions tuned-steps item-sizes
+	      input-tag-names prescriptions item-sizes
+	      consumes produces
 	      &key (target-directory "") 
 	           (target-header-file "mccompiled.h") 
 	           (target-source-file "mccompiled.C"))
@@ -401,10 +434,10 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
       (generate-header item-names 
 		       tag-names 
 		       step-names
-		       prescriptions
-		       tuned-steps
 		       item-sizes))
     (format t "done~%Generating source file... ")
-    (write-to-file source
-      (generate-source step-names step-bodies item-names input-tag-names))
+    (let ((*header-name* "mccompiled"))
+     (write-to-file source
+       (generate-source step-names step-bodies item-names
+			input-tag-names tag-names prescriptions consumes produces)))
     (format t "done~%Written to ~A and ~A.~%" header source)))

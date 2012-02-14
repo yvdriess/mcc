@@ -943,7 +943,6 @@ connections to the program graph."
   angle
   s-signal
   t-signal
-  check-step-kernel
   do-m-tag-collection
   )
 
@@ -978,23 +977,37 @@ connections to the program graph."
 ;; (defmethod cnc-operation-tags ((obj cnc-measurement-operation))
 ;;   (list (cnc-measurement-operation-do-m-tag-collection obj)))
 
+(defstruct cnc-prescription
+  (tag  nil :type tag-collection)
+  (step nil :type cnc-step))
+
+(defgeneric listify-prescriptions (obj))
+(defmethod listify-prescriptions ((obj sequence))
+  (mapcar #'listify-prescriptions obj)
+)
+(defmethod listify-prescriptions ((obj cnc-prescription))
+  (list (cons (cnc-prescription-tag obj)
+	      (cnc-prescription-step obj))))
+
 ;;;; CNC-NODE-PRESCRIPTIONS
 (defgeneric cnc-node-prescriptions (content node))
 (defmethod cnc-node-prescriptions (obj node))
 (defmethod cnc-node-prescriptions ((obj cnc-input-tangle) node)
-  (list (cons (cnc-input-tangle-step-kernel obj)
-	      (cnc-input-tangle-generator-tag-collection obj))))
+  (list (make-cnc-prescription
+	 :tag  (cnc-input-tangle-generator-tag-collection obj)
+	 :step (cnc-input-tangle-step-kernel obj))))
 (defmethod cnc-node-prescriptions ((obj cnc-output-tangle) node)
-  (list (cons (cnc-output-tangle-step-kernel obj)
-	      (cnc-output-tangle-tag-collection obj))))
+  (list (make-cnc-prescription
+	 :tag (cnc-output-tangle-tag-collection obj)
+	 :step (cnc-output-tangle-step-kernel obj))))
 (defmethod cnc-node-prescriptions ((obj cnc-operation) node)
-  (list (cons (cnc-operation-step-kernel obj)
-	      (cnc-operation-input-tag-collection obj))))
+  (list (make-cnc-prescription 
+	 :tag  (cnc-operation-input-tag-collection obj)
+	 :step (cnc-operation-step-kernel obj))))
 (defmethod cnc-node-prescriptions ((obj cnc-measurement-operation) node)
-  (list (cons (cnc-measurement-operation-check-step-kernel obj)
-	      (cnc-measurement-operation-input-tag-collection obj))
-	(cons (cnc-measurement-operation-step-kernel obj)
-	      (cnc-measurement-operation-do-m-tag-collection obj))))
+  (list (make-cnc-prescription 
+	 :tag  (cnc-measurement-operation-input-tag-collection obj)
+	 :step (cnc-measurement-operation-step-kernel obj))))
 
 (defun make-tangle-name-pair () 
   ;; I want both names to use the same number
@@ -1045,7 +1058,6 @@ connections to the program graph."
 				  :angle (ag-measurement-angle operation)
 				  :s-signal (ag-measurement-s-signal operation)
 				  :t-signal (ag-measurement-t-signal operation)
-				  :check-step-kernel (get 'check_M 'kernel)
 				  :step-kernel (get 'M 'kernel)
 				  :do-m-tag-collection (make-tag-collection :name (symbol-to-string (gensym "do_m_")))))
 
@@ -1101,8 +1113,7 @@ connections to the program graph."
 			(list (item-collection-name output-item-collection) 
 			      (tag-collection-name output-tag-collection))
 					; params: size qid
-			(mapcar #'number-to-string (list size
-  qubit-index))))))
+			(mapcar #'number-to-string (list size qubit-index))))))
 
 
 (defmethod instantiate-node-content ((operation cnc-correction-operation) node cnc-graph)
@@ -1110,9 +1121,8 @@ connections to the program graph."
       operation
     (setf step-kernel
 	  (apply-kernel step-kernel
-					; input: tangle, signal
-			(list (item-collection-name input-item-collection)
-			      (item-collection-name signal-item-collection))  
+					; input: tangle
+			(list (item-collection-name input-item-collection))  
 					; output: tangle, tag
 			(list (item-collection-name output-item-collection) 
 			      (tag-collection-name output-tag-collection))
@@ -1172,26 +1182,12 @@ connections to the program graph."
 			     (item-collection-name input2-item-collection))))))
 
 (defmethod instantiate-node-content ((operation cnc-measurement-operation) node cnc-graph)
-  ;; the operation step kernel performs the M operation, but there is a second step 'check-M' that needs to be introduced
-  (with-slots (check-step-kernel step-kernel input-item-collection output-item-collection output-tag-collection 
+  ;; the operation step kernel performs the M operation
+  (with-slots (step-kernel input-item-collection output-item-collection output-tag-collection 
 	       signal-item-collection qubit-index size do-m-tag-collection
 	       tuner-name tuner-args angle)
       operation
-    (setf check-step-kernel
-					; (in_tangle signals) 
-					; (do_m_tags out_tangle out_tags signals) 
-					; (qid)
-	  (apply-kernel check-step-kernel
-					; input: tangle,signals
-			(list (item-collection-name input-item-collection)
-			      (item-collection-name signal-item-collection))
-					; output: tag, tangle, tag, signals
-			(list (tag-collection-name do-m-tag-collection)
-			      (item-collection-name output-item-collection)
-			      (tag-collection-name output-tag-collection)
-			      (item-collection-name signal-item-collection))
-					; params: qid
-			(mapcar #'number-to-string (list qubit-index))))    
+    
     ;; this will apply the M operation kernel
     ;;   (in_tangle) (out_tangle out_tags) (size qid agle)
     (setf step-kernel
@@ -1286,25 +1282,28 @@ connections to the program graph."
   (loop
     for node in (graph-nodes cnc-graph)
     for node-content = (node-content node)
-    for node-prescriptions = (cnc-node-prescriptions node-content node)
+    for node-prescriptions = (cnc-node-prescriptions node-content
+						     node)
     appending node-prescriptions into prescriptions
-    ;; currently adding a single [int signals <bool>] collection in the
-    ;; generator itself when (cnc-operation-p (node-content node)) do
-    ;; (pushnew (cnc-operation-signal-item-collection (node-content
-    ;; node)) items)
-    
     when (cnc-tangle-p node-content)
       collect (cnc-tangle-item-collection node-content) 
 	into items
-	and
-	  collect (cnc-tangle-size node-content)
-	    into item-sizes
+      and
+      collect (cnc-tangle-size node-content)
+        into item-sizes
     when (cnc-input-tangle-p node-content)
       collect (cnc-input-tangle-generator-tag-collection node-content)
 	into generator-tag-collections
     when (cnc-kronecker-operation-p node-content)
       collect (tag-collection-name (cnc-kronecker-operation-input2-tag-collection node-content))
 	into dangling-tag-names
+    when (cnc-operation-p node-content)
+      collect (cons (symbol-name (cnc-step-name (cnc-operation-step-kernel node-content)))
+		    (item-collection-name (cnc-operation-input-item-collection node-content)))
+        into consumes
+      and collect (cons (symbol-name (cnc-step-name (cnc-operation-step-kernel node-content)))
+			(item-collection-name (cnc-operation-output-item-collection node-content)))
+        into produces
     ;; adding tuners
     when (and (cnc-operation-p node-content)
 	      (cnc-operation-tuner-name node-content))
@@ -1313,8 +1312,8 @@ connections to the program graph."
 			   (cnc-operation-tuner-args node-content)))
 	into tuned-steps
     finally
-       (let* ((steps       (mapcar #'car prescriptions))
-	      (tag-names   (mapcar (compose #'tag-collection-name #'cdr) prescriptions))
+       (let* ((steps       (mapcar #'cnc-prescription-step prescriptions))
+	      (tag-names   (mapcar (compose #'tag-collection-name #'cnc-prescription-tag) prescriptions))
 	      (step-names  (mapcar (compose #'symbol-name #'cnc-step-name) steps))
 	      (step-bodies (mapcar #'cnc-step-body steps)))
 	 (return (make-cnc-program :items         (mapcar #'item-collection-name items)
@@ -1323,7 +1322,9 @@ connections to the program graph."
 				   :step-names    step-names
 				   :step-bodies   step-bodies
 				   :input-tags    (mapcar #'tag-collection-name generator-tag-collections)
-				   :prescriptions (pairlis step-names tag-names)
+				   :prescriptions (pairlis tag-names step-names)
+				   :consumes      consumes
+				   :produces      produces
 				   :tuned-steps   tuned-steps)))))
 
 
@@ -1334,12 +1335,15 @@ connections to the program graph."
 (defstruct cnc-step
   (name (gensym "step"))
   body
+  constants
   inputs
   outputs)
 
 (defstruct kernel 
   name
   parameter-names
+  inputs
+  outputs
   body-generator)
 
 (defun apply-kernel (kernel inputs outputs &optional parameter-values)
@@ -1349,6 +1353,7 @@ connections to the program graph."
 				inputs
 				outputs
 				parameter-values)
+		 :constants parameter-values
 		 :inputs inputs
 		 :outputs outputs))
 
@@ -1369,6 +1374,8 @@ connections to the program graph."
 					    ,g-body-string)))
 	 (setf (get ',name 'kernel)
 	       (make-kernel :name ,g-name
+			    :inputs ,g-inputs
+			    :outputs ,g-outputs
 			    :parameter-names ,g-parameters
 			    :body-generator #'body-generator))))))
 
@@ -1387,6 +1394,9 @@ connections to the program graph."
 ;; 		(mapcar #'number-to-string parameters))
 
 
+
+
+
 (defkernel E (in_items) (out_items out_tags) (size qid_1 qid_2)
   "
 amplitude a_i;
@@ -1403,7 +1413,7 @@ c.`out_items`.put( i , a_i );
 c.`out_tags`.put( i );
 ")
 
-(defkernel X (in_tangle signals) (out_tangle out_tags) (size qid)
+(defkernel X (in_tangle) (out_tangle out_tags) (size qid)
   "
 amplitude a_i;
 const int i = t;
@@ -1412,7 +1422,6 @@ const int n = `size` / `qid`;
 bool signal=true;
 
 c.`in_tangle`.get( i , a_i );
-//c.`signals`.get( `qid`, signal );
 
 //const int f_i = permute( i , n, m );
 //const int f_target_index = f_i ^ 1;
@@ -1421,11 +1430,11 @@ const int target_index =
   signal ? permute( permute(i, n, m)^1, m, n )
          : i;
 
-c.`out_tangle`.put( target_index , a_i , 1 );
+c.`out_tangle`.put( target_index , a_i );
 c.`out_tags`.put( target_index );
 ")
 
-(defkernel Z (in_tangle signals) (out_tangle out_tags) (size qid)
+(defkernel Z (in_tangle) (out_tangle out_tags) (size qid)
   "
 amplitude a_i;
 const int i = t;
@@ -1434,14 +1443,14 @@ const int n = `size` / `qid`;
 bool signal=true;
 
 c.`in_tangle`.get( i , a_i );
-//c.`signals`.get( `qid`, signal);
+
 const int f_i = permute( i , n, m );
 
 if( signal )
   if (f_i % 2)
     a_i = -a_i;
 
-c.`out_tangle`.put( i , a_i , 1);
+c.`out_tangle`.put( i , a_i );
 c.`out_tags`.put( i );
 ")
 
@@ -1464,37 +1473,11 @@ if ( (i & m) == 0 ) {
   c.`in_tangle`.get( i2 , a_i2 );
   const amplitude new_amp = a_i1 - a_i2 * phi_1;
   const unsigned new_index = compact_bit_index(i,m);
-  c.`out_tangle`.put( new_index , new_amp , 1);
+  c.`out_tangle`.put( new_index , new_amp );
   c.`out_tags`.put( new_index );
 }
 ")
 
-#|
-if ((f_i % 2) == 0) {
-const unsigned int i2 = permute( f_i^1 , m , n );
-const unsigned int new_index = permute( f_i/2 , m , n );
-// phi's will depend on the angle of measurement
-const amplitude phi_1 = 0;
-const amplitude phi_2 = 1;
-c.`in_tangle`.get( i  , a_i1 );
-c.`in_tangle`.get( i2 , a_i2 );
-// normally apply factor to i1 and i2 here, skipping this for now 
-c.`out_tangle`.put( new_index , a_i1 * phi_1 + a_i2 * phi_2 , 1);
-c.`out_tags`.put( new_index );
-}
-|#
-
-					
-
-(defkernel check_M (in_tangle signals) (do_m_tags out_tangle out_tags signals) (qid)
-  "
-amplitude amp;
-  // shortcut: lets say measurement always returns 1;
-bool measurement_result = true;
-  //c.`signals`.put(t,measurement_result);
-  c.`do_m_tags`.put(t); // lets do the measurement
-"
-  )
 
 (defkernel gen_tangle () (tangle tags) (size)
   "
@@ -1591,6 +1574,8 @@ for(int i(0);i<`size-2`;++i) {
   step-bodies
   input-tags
   prescriptions
+  produces
+  consumes
   tuned-steps)
 
 #+nil(let* ((g (mc-graph-to-cnc-graph (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1))))))
@@ -1658,8 +1643,10 @@ for(int i(0);i<`size-2`;++i) {
 	(show-dot g)
 	(format t "done~%Collecting data for CnC code generation... ")
 	(let ((cnc-program (construct-cnc-program-from-graph g)))
-	  (with-slots (items item-sizes tags step-names step-bodies input-tags prescriptions tuned-steps)
+	  (with-slots (items item-sizes tags step-names step-bodies
+		       input-tags prescriptions tuned-steps produces consumes)
 	      cnc-program
 	    (format t "done~%Beginning code generation.~%")
-	    (cnc-gen:build items tags step-names step-bodies input-tags prescriptions tuned-steps item-sizes)
+	    (cnc-gen:build items tags step-names step-bodies
+			   input-tags prescriptions item-sizes consumes produces)
 	    'ok))))))

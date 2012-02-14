@@ -26,7 +26,7 @@ DEST_OBJS=$(SOURCES:.C=.o)
 all:  stresstest
 
 stresstest: $(DEST_OBJS)
-	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lcnc -ltbb -ltbbmalloc 
+	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lcnc_static -ltbb -ltbbmalloc 
 
 %.o: %.C %.h
 	$(CXX) $(CPPFLAGS) -c -I$(CNC_INSTALL_DIR)/include -o $@ $<

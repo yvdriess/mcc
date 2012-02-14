@@ -67,6 +67,10 @@
 #include <cnc/debug.h>
 
 struct context;
+
+typedef  CnC::item_collection< int, int > items_node;
+typedef  CnC::tag_collection< int > tags_node;
+
 ")
 
 (defun generate-step-header (step-name)
@@ -78,8 +82,8 @@ struct context;
 (defun generate-context-header (item-names tag-names prescriptions)
   (line "~%struct context: public CnC::context< context > {~%")
   (indented
-    (lines "CnC::item_collection< int, int > ~A;" item-names)
-    (lines "CnC::tag_collection< int > ~A;" tag-names)
+    (lines "items_node ~A;" item-names)
+    (lines "tags_node ~A;" tag-names)
     (line "context(): ")
     (indented 
       (line "CnC::context< context >(),")
@@ -181,29 +185,25 @@ c.tags_~d.put(i);
 	  n (1+ n) (1+ n))
 )
 
-(defun source-body (size)
+(defun source-body ()
   (format nil "
-for(int i=0;i<~d; ++i) {
+for(int i=0;i<t; ++i) {
   c.items_1.put(i,1);
   c.tags_1.put(i);
 }
 "
-	  size))
+	 ))
 
-(defun sink-body (last size)
+(defun sink-body (last)
   (format nil "
-int results[~d];
-for(int i=0;i<~d; ++i) {
-  c.items_~d.get(i,results[i]);
-  printf(\"results[%d]: %d\\n\",i,results[i]);
-}
+  int result;
+  c.items_~d.get(t,result);
+  printf(\"results[%d]: %d\\n\",t,result);
 "
-	  size
-	  size
 	  last))
 
 (defun generate-depth-stresstest (depth)
-  (let ((size 16)
+  (let (
 	(item-names    (loop for i from 1 to depth
 			     collect (format nil "items_~d" i)))
 	(tag-names     (loop for i from 1 to depth
@@ -220,13 +220,81 @@ for(int i=0;i<~d; ++i) {
 	   (append step-names
 		   (list "source" "sink"))
 	   (append step-bodies
-		   (list (source-body size)
-			 (sink-body depth size)))
+		   (list (source-body)
+			 (sink-body depth)))
 	   (list "source_tags")
 	   (append prescriptions
-		   (list (cons "sink" 
-			       (format nil "tags_~d" depth)))))
+		   (list 
+		    (cons "source"
+			  "source_tags")
+		    (cons "sink" 
+			  (format nil "tags_~d" depth)))))
+))
+
+(defun source-width-body (n)
+  (format nil "
+for( int i=0 ; i<t ; ++i ) {
+  c.items_in_~d.put(i,1);
+  c.tags_in_~d.put(i);
+}
+"
+	  n n))
+
+
+(defun step-width-body (n)
+  (format nil "
+  int i;
+  c.items_in_~d.get(t,i);
+  c.items_out_~d.put(t,++i);
+  c.tags_out_~d.put(t);
+"
+	  n n n))
+
+(defun sink-width-body (n)
+  (format nil "
+  int i;
+  c.items_out_~d.get(t,i);
+  printf(\"{%d} result[%d]: %d\n\",~d,t,i);
+"
+	  n n))
+
+;; source_x -> item_in_x -> step_x -> item_out_x -> sink
+;;  source_tags_x          tag_x                tag_x'
+(defun generate-width-stresstest (width)
+  (let (
+	(item-names    (loop for i from 1 to width
+			     appending  (list (format nil "items_in_~d" i)
+					      (format nil "items_out_~d" i))))
+	(tag-names     (loop for i from 1 to width
+			     appending (list (format nil "source_tags_~d" i)
+					     (format nil "tags_in_~d" i)
+					     (format nil "tags_out_~d" i))))
+	(step-names    (loop for i from 1 to width
+			     appending (list (format nil "source_~d" i)
+					     (format nil "step_~d" i)
+					     (format nil "sink_~d" i))))
+	(step-bodies   (loop for i from 1 to width
+			     appending (list (source-width-body i)
+					     (step-width-body i)
+					     (sink-width-body i))))
+	(prescriptions (loop for i from 1 to width
+			     appending (list
+					(cons (format nil "source_~d" i)
+					      (format nil "source_tags_~d" i))
+					(cons (format nil "step_~d" i)
+					      (format nil "tags_in_~d" i))
+					(cons (format nil "sink_~d" i)
+					      (format nil "tags_out_~d" i))))))
+    (build item-names
+	   tag-names
+	   step-names
+	   step-bodies
+	   (loop for i from 1 to width
+		 collect (format nil "source_tags_~d" i))
+	   prescriptions)
 ))
 
 ;(generate-depth-stresstest 300)
+;(generate-width-stresstest 3)
+
 

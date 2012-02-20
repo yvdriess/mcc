@@ -18,15 +18,13 @@
 ;;;; OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 ;;;; THE SOFTWARE.
 
-
-
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (ql:quickload 'alexandria)
   (declaim (optimize (speed 0) (debug 3) (safety 3))))
 
 (defpackage :cnc-generator
   (:nicknames :cnc-gen)
-  (:use :cl)
+  (:use :cl :cnc)
   (:import-from alexandria compose mappend with-gensyms)
   (:export build))
 
@@ -75,37 +73,12 @@ typedef std::complex<double> amplitude;
 
 struct context;
 ")
-  (defvar *source-tensor-permute-function*
-"
-static unsigned int tensor_permute(const unsigned int i,const unsigned int siz, 
-                                   const unsigned int i1, const unsigned int i2) {
-  // MAKE SURE i1 >= i2 !!!
-  // const int o = i1;
-  const unsigned int m = 2;
-  const unsigned int n = (i1 / i2);
-  const unsigned int p = i2;
-   return 
-    i 
-    + p * ( n - 1 ) * floor( i / p      )
-    - p * (m*n - 1) * floor( i / (m*p)  )
-    + p * n * (n-1) * floor( i / (m*p*n));
-}")
-  (defvar *source-permute-function*
-"
-static unsigned int permute(const unsigned int i,const unsigned int m, 
-                            const unsigned int n) {
-  return n * ( i % m ) + floor( i / m ); 
-}")
-  (defvar *source-compact-index-function*
-"
-static unsigned int compact_bit_index(const unsigned int i, const unsigned int bit) {
-  return ((i - i % (2 * bit)) >> 1) + i % bit;
-}
-")
+ 
+ 
   (defvar *indentation* 0)
   (defvar *seperator* "")
   (defvar *line-stream* t)
-  (defvar *header-name* "mccompiled")
+  (defvar *header-name*)
 
 (defun symbol-to-string (sym)
   (string-downcase (symbol-name sym)))
@@ -160,159 +133,147 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
   `(progn (terpri *line-stream*)
 	  *line-stream*))
 
-;; (defun generate-start-input (tag-collection)
-;;   ;; this tag collection only needs 1 element to bootstrap the content generation
-;;   (line "void start-input-~A() {" tag-collection)
-;;   (indented
-;;     (line "ctx.~A.put(0);" tag-collection))
-;;   (line "};")
-;;   )
+;;;;;;;;;;;;;;;;;;;
+;;;; UTILITIES ;;;;
+;;;;;;;;;;;;;;;;;;;
+
+(defmacro write-to-file (pathname &body body)
+  "Writes all 'line' and 'lines' called in the body to the specified file path."
+  `(with-open-file (out ,pathname
+			:direction :output 
+			:if-does-not-exist :create 
+			:if-exists :supersede)
+     (let ((*line-stream* out))
+       ,@body)))
+
+(defmacro writing-to-string (&body body)
+  `(let ((*line-stream* (make-string-output-stream)))
+     ,@body
+     (get-output-stream-string *line-stream*)))
 
 
-(defun declare-tuners ()
-  ;; (line "
-;; struct context;
 
-;; struct kron_tuner : public CnC::step_tuner<>
-;; {
-;;    kron_tuner(const unsigned int size2,
-;;               CnC::item_collection< int, amplitude > &input): size2(size2), input(input) {}
-;;    const unsigned int size2;
-;;    CnC::item_collection< int, amplitude > &input;
+(defun generate-ctor-and-members (name formal-parameters)
+  (let ((parameter-names (mapcar #'cnc::formal-parameter-name 
+				 formal-parameters))
+	(parameter-types (mapcar #'cnc::formal-parameter-type 
+				 formal-parameters)))
+    ;; data members
+    (lines "~A ~A;" parameter-types parameter-names)
+    ;; constructor
+    (line "~A(" name)
+    (indented 
+     (comma-seperated
+      (lines " ~A _~A" parameter-types parameter-names)
+      (line "): ")
+      (indented
+       (comma-seperated 
+	(lines "~A(_~:*~A)" parameter-names))
+       (line "{};"))))))
 
-;;   template< class dependency_consumer >
-;;     void depends( const int & tag, context & c, dependency_consumer & dC ) const;
-;; };
+(defun generate-tuners (program)
+  ;; step tuners, actuals will come from cnc-item-collection's actual parameters
+  (loop for step-tuner in (mapcar #'cnc::kernel-tuner 
+				  (distinct-kernels program))
+	do (with-slots (name body parameters deriving-from) step-tuner
+	     (line "struct ~A : public ~S {" name deriving-from)
+	     (indented 
+	      (generate-ctor-and-members name parameters)
+	      (line "template< class dependency_consumer >")
+	      (line "void depends( const int& t, fib_context& c, dependency_consumer& dC ) const {")
+	      (indented (line body))
+	      (line "}"))
+	     (line "}")
+	   )))
 
-;; struct m_tuner : public CnC::step_tuner< int, context >
-;; {
-;;    m_tuner(const unsigned int size,
-;;            const unsigned int qid,
-;;            CnC::item_collection< int, amplitude > &input): 
-;;         size(size), qid(qid), input(input) {}
-;;    const unsigned int size;
-;;    const unsigned int qid;
-;;    CnC::item_collection< int, amplitude > &input;
+(defun generate-step-header (kernel)
+  (let* ((name (format nil "step_~A" (cnc::kernel-name kernel)))
+	 (parameters (cnc::kernel-parameters kernel)))
+    (line "~%struct ~A {" name)
+    (indented
+     (generate-ctor-and-members name parameters)
+     (line "int execute( const int& t, context& c ) const;"))
+    (line "};")))
 
-;;   template< class dependency_consumer >
-;;     void depends( const int & tag, context & c, dependency_consumer & dC ) const;
-;; };
-;; ")
-  )
+(defun generate-step-headers (program)
+  (let ((kernels (distinct-kernels program)))
+    (loop for kernel in kernels
+	  do (generate-step-header kernel))))
 
-(defun define-tuners ()
-  ;; (line "
-;; template< class dependency_consumer >
-;; void kron_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
-;; {
-;;   for(unsigned int i(0);i<size2;++i) {
-;;     dC.depends( input , i );
-;;   }
-;; }
-
-;; template< class dependency_consumer >
-;; void m_tuner::depends( const int & tag, context & c, dependency_consumer & dC ) const
-;; {
-;;   if ( (tag & qid) == 0 ) {
-;;     dC.depends( input , tag );
-;;     dC.depends( input , tag + qid);
-;;   }
-;; }
-;; ")
-  )
-
-
-(defun generate-step-header (step-name)
-  (line "~%struct step_~A {" step-name)
-  (indented 
-    (line "int execute( const int& t, context& c ) const;"))
-  (line "};"))
-
-(defun generate-context-header (step-names item-names tag-names
-				item-sizes tuned-tags)
+(defun generate-context-header (program)
   (line "~%struct context: public CnC::context< context > {~%")
-  (indented
-    ;; (loop for step in step-names
-    ;; 	  for tuned = (assoc step tuned-steps)
-    ;; 	  if tuned
-    ;; 	    do (line "CnC::step_collection< step_~A, ~A > ~A "
-    ;; 		     step (cadr step)))
-    (lines "CnC::step_collection< step_~A > ~A;" step-names step-names)
-    (lines "CnC::item_collection< int, amplitude > ~A; // SIZE=~A" 
-	   item-names item-sizes)
-    (line  "CnC::item_collection< int, bool > signals;")
-    (loop for tag-collection in tag-names
-	  for tuned = (assoc tag-collection tuned-tags)
-	  if tuned
-	    do (line "CnC::tag_collection< int, CnC::tag_tuner< tbb::blocked_range< int > > > ~A;"
-		     tag-collection)
-	  else do (line "CnC::tag_collection< int > ~A;" tag-collection))
-;    (lines "CnC::tag_collection< int > ~A;" tag-names)
-    (line  "context();")
-    )
+  (indented    
+   (lines "CnC::step_collection< step_~A > ~A;" 
+	  (step-kernel-names program)
+	  (step-names program))
+   (lines "CnC::item_collection< int, ~A > ~A;" 
+	  (item-names program)
+	  (item-types program))
+   (lines "CnC::tag_collection< int > ~A;" 
+	  (tag-names program))
+   (line  "context();")
+   )
   (line "};~%"))
 
-(defun generate-context-constructor-source (item-names tag-names step-names
-					    prescriptions consumes produces)
-  (line "context::context(): ")
-    (indented 
-      (line "CnC::context< context >(),")
-      (lines "~A( *this , \"~A\" )," step-names step-names)
-      (lines "~A( *this )," item-names)
-      (line "signals( *this, \"signals\" ),")
-      (comma-seperated
-	(lines "~A( *this , \"~A\" )" tag-names tag-names))
-      (indented
-	(line "{")
-	(indented
-	  (lines "~A.prescribes( ~A, *this );"
-		 (mapcar #'car prescriptions)
-		 (mapcar #'cdr prescriptions))
-	  (lines "~A.consumes( ~A );"
-		 (mapcar #'car consumes)
-		 (mapcar #'cdr consumes))
-	  (lines "~A.produces( ~A );"
-		 (mapcar #'car produces)
-		 (mapcar #'cdr produces))
-	  
-	  ;; (loop for entry in prescriptions
-	  ;;    for tuned = (assoc (car entry) tuned-steps)
-	  ;;    if tuned
-	  ;; 						   ; this is
-	  ;; 						   ; hidious!
-	  ;;      do (line "prescribe( ~A , ~A() , ~A(~{ ~A ~^,~}) );" 
-	  ;; 		(cdr entry) (car entry) (cadr tuned) (cddr tuned))
-	  ;;    else do (line "prescribe( ~A , ~A() );" (cdr entry) (car entry)))
-	  
-;	  (lines "~A.put(0);" input-tag-names)
-	  )
-	(line "}~%")))
-)
+(defun generate-utility-headers ())
 
-(defun generate-header (item-names 
-			tag-names 
-			step-names
-			item-sizes)
+(defun generate-header (program)
   ;; preamble
   (line #.*MIT-license*)
   (line #.*header-preamble*)
-  (mapc #'generate-step-header step-names)
+  (generate-tuners program)
+  (generate-step-headers program)
   (newline)
-  (line *source-permute-function*)
-  (line *source-tensor-permute-function*)
-  (line *source-compact-index-function*)
-;  (declare-tuners)
-  (generate-context-header step-names item-names tag-names item-sizes)
- ; (define-tuners)
+  ;; declare/define pervasive functions such as permute
+  (lines "~S" (cnc::cnc-program-utility-function-bodies program))
+  (generate-context-header program)
   (line "#endif"))
 
-(defun generate-main-source (item-names step-names input-tag-names)
-  (line "int main(int argc, char* argv[]) {")
-  (indented
-       (line "opterr = 0;")
-       (line "int debug_level=0;")
-       (line "int threads=0;")
-       (line "int c; 
+
+;;;;;;;;;;;;;;;
+;;;; BUILD ;;;;
+;;;;;;;;;;;;;;;
+
+(defun build (program
+	      &key (target-directory "") 
+	           (target-filename "mccompiled"))
+  "Entry point for code generation; call with an cnc-program object
+	      representing the cnc program to be generated."
+  (declare (type cnc::cnc-program program))
+  (let ((header (concatenate 'string target-directory target-filename ".h"))
+	(source (concatenate 'string target-directory target-filename ".C")))
+    (format t "Generating header file... ")
+    (write-to-file header
+      (generate-header program))
+    (format t "done~%Generating source file... ")
+    #+nil(let ((*header-name* (concatenate 'string target-filename ".h")))
+     (write-to-file source
+       (generate-source program)))
+    (format t "done~%Written to ~A and ~A.~%" header source)))
+
+
+;;;; SOURCE FILE GENERATORS ;;;;
+
+(defun generate-source (program)
+  (line #.*MIT-license*)
+  (line "#include <stdio.h>")
+  (line "#include <stdlib.h>")
+  (line "#include <math.h>")
+  (line "#include \"~A\"~%" *header-name*)
+  (generate-main-source program)
+  (generate-context-constructor-source program)
+  (generate-step-source program)
+  
+  )
+
+(defun generate-main-source (program)
+  (let ()
+    (line "int main(int argc, char* argv[]) {")
+    (indented
+      (line "opterr = 0;")
+      (line "int debug_level=0;")
+      (line "int threads=0;")
+      (line "int c; 
 while ((c = getopt (argc, argv, \"dt:\")) != -1)
   switch (c) {
     case 't':
@@ -334,110 +295,124 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
            default:
              abort ();
   }")
- 
-    (line "if (threads>0) { CnC::debug::set_num_threads( threads ); }")
+      
+      (line "if (threads>0) { CnC::debug::set_num_threads( threads ); }")
 
-    (line "context ctx;")
+      (line "context ctx;")
 
-    ;; debug
-;      (line "CnC::debug::trace_all(ctx, \"context\");")
+      ;; make tuner variables:  tune_`kernel_name` `step_name`(actual params);
 
-    (line "if (debug_level) { ")
+      (line "if (debug_level) { ")
       (indented
-    	(line "CnC::debug::collect_scheduler_statistics(ctx);")
-	(line "CnC::debug::trace( ctx.signals );")
-    	(lines "CnC::debug::trace( ctx.~A );" step-names)
-    	(lines "CnC::debug::trace( ctx.~A );" item-names))
-    (line "}~%")
- 
-    ;; insert code that fills the right tag and item collections with elements
-    (lines "ctx.~A.put(0);" input-tag-names)
+	(line "CnC::debug::trace_all(ctx, \"context\");")
+	(line "CnC::debug::collect_scheduler_statistics(ctx);")
+	)
+      (line "}~%")
 
-    (line "ctx.wait();")
-    ;; insert code that retrieves the info
-    (line "return CnC::CNC_Success;"))
-  (line "}~%"))
+      ;; insert code that fills the right tag and item collections with elements
+      (generate-source-calls program)
 
-(defun generate-step-source (step-name step-body)
-  (line "int step_~A::execute(const int & t, context & c ) const {" step-name)
-  ;; insert step logic here
-  (indented 
-    (line step-body)
-    (line "return CnC::CNC_Success;"))
-  (line "}~%"))
+      (line "CnC::debug::init_timer();")
+      (line "ctx.wait();")
+      (line "CnC::debug::finalize_timer(\"-\");")
 
-(defun generate-source (step-names step-bodies item-names
-			input-tag-names tag-names prescriptions consumes produces)
-  (line #.*MIT-license*)
-  (line "#include <stdio.h>")
-  (line "#include <stdlib.h>")
-  (line "#include \"~A.h\"~%" *header-name*)
-  (generate-main-source item-names step-names input-tag-names)
-;  (line *source-permute-function*)
-;  (line *source-tensor-permute-function*)
-  (generate-context-constructor-source item-names tag-names step-names
-				       prescriptions consumes produces)
-  (mapcar #'generate-step-source step-names step-bodies)
+      ;; insert code that retrieves the info
+      (generate-sink-calls program)
+      
+      (line "return CnC::CNC_Success;"))
+    (line "}~%")))
+
+(defun generate-step-instance (step)
+  (with-slots (name 
+	       kernel
+	       parameter-bindings) step 
+    (format nil "step_~A(~{~A~^,~})"
+	    (cnc::kernel-name kernel)
+	    (mapcar #'cnc::actual-parameter-value parameter-bindings))))
+
+
+(defun generate-tuner-instance (step)
+  (with-slots (kernel
+	       parameter-bindings) step
+    (with-slots (name parameters) (cnc::kernel-tuner kernel)
+      (format nil "~A(~{~A~^,~})"
+	      name
+	      ;; cheating a bit, pass all the consumes item
+	      ;; collections and the matching parameters
+	      (append (cnc::kernel-consumes kernel)
+		      (match-parameter-values parameters
+					      parameter-bindings)))))
   )
 
-(defmacro write-to-file (pathname &body body)
-  "Writes all 'line' and 'lines' called in the body to the specified file path."
-  `(with-open-file (out ,pathname
-			:direction :output 
-			:if-does-not-exist :create 
-			:if-exists :supersede)
-     (let ((*line-stream* out))
-       ,@body)))
 
-(defmacro writing-to-string (&body body)
-  `(let ((*line-stream* (make-string-output-stream)))
-     ,@body
-     (get-output-stream-string *line-stream*)))
+(defun generate-context-constructor-source (program)
+  (line "context::context(): ")
+    (indented 
+      (line "CnC::context< context >(),")
+      ;; instantiate step collection data members
+      (lines "~A( *this , \"~:*~A\", ~A)," 
+	     (step-names program)
+	     (mapcar #'generate-step-instance (cnc::cnc-program-steps program))
+;	     (mapcar #'generate-tuner-instance (cnc::cnc-program-steps
+;program))
+	     )
+      (lines "~A( *this , \"~:*~A\" )" (item-names program))
+      (lines "~A( *this , \"~:*~A\" )" (tag-names program))
+      (indented
+	(line "{")
+	(indented
+	  (let ((prescriptions (cnc-program-prescriptions program))
+		(consumes (cnc-program-consumes program))
+		(produces (cnc-program-produces program))
+		(controls (cnc-program-controls program)))
+	   (lines "~A.prescribes( ~A, *this );"
+		  (mapcar #'car prescriptions)
+		  (mapcar #'cdr prescriptions))
+	    (lines "~A.consumes( ~A );"
+		   (mapcar #'car consumes)
+		   (mapcar #'cdr consumes))
+	    (lines "~A.produces( ~A );"
+		   (mapcar #'car produces)
+		   (mapcar #'cdr produces))
+	    (lines "~A.controls( ~A );"
+		   (mapcar #'car controls)
+		   (mapcar #'cdr controls))))
+	(line "}~%"))))
 
 
+(defun generate-step-source (program)
+  ;; generate each step's body
+  (loop for kernel in (distinct-kernels program)
+	do (progn 
+	     (line "int step_~A::execute(const int & t, context & c ) const {" 
+		   (cnc::kernel-name kernel))
+	     (indented 
+	       (let ((formals (mapcar #'cnc::kernel-parameters kernel)))
+		 (lines "~A ~A;" 
+			(mapcar #'cnc::formal-parameter-type formals)
+			(mapcar #'cnc::formal-parameter-name formals)))
+	       (line (cnc::kernel-body kernel))
+	       (newline)
+	       (line "return CnC::CNC_Success;"))
+	     (line "}~%"))))
 
+(defun generate-source-calls (program)
+  (loop for item-collection in
+	     (input-item-collections program)
+	for tag-collection in 
+	     (input-tag-collections program)
+	do (line "~A(ctx.~A, ctx.~A, ~d);"
+		 (cnc::kernel-name (cnc::cnc-program-source-kernel
+				    program))
+		 (cnc::cnc-item-collection-name item-collection)
+		 (cnc::cnc-tag-collection-name tag-collection)
+		 (cnc::cnc-item-collection-size item-collection))))
 
-;; (defun apply-step-operation (step-operation &rest actual-parameters)
-;;   (let ((step (make-step-application :name (step-operation-name step-operation)
-;; 				     :formal-parameters (step-operation-formal-parameters step-operation)
-;; 				     :body (step-operation-body step-operation))))
-;;     (assert (= (list-length (step-operation-formal-parameters step)) 
-;; 	       (list-length actual-parameters)))
-;;     (setf (step-application-arguments step) actual-parameters)
-;;     step))
-
-;; (let ((cz-step (generate-cnc-step "CZ" '("tangle_1") '("tangle_2" "tag_do_on_2") ))
-;;       (check_step (make-step-operation :name "check"
-;; 				       :formal-parameters (list ))))
-
-;; (let ((steps (list (apply-kernel (get 'cz 'kernel)
-;; 				 '("TANGLE_1")
-;; 				 '("TANGLE_2" "TAG_DO_ON_TANGLE_2")
-;; 				 (mapcar #'number-to-string '(8 2 4))))))
-;;   (write-to-file (concatenate 'string "~/dev/cnc/test/" *filename* ".h") 
-;;     (generate-header '(tangle_1 tangle_2)
-;;   		     '(tag_do_on_tangle_1 tag_do_on_tangle_2)
-;; 		     steps))
-;;   (write-to-file (concatenate 'string "~/dev/cnc/test/" *filename* ".C")
-;;     (generate-source steps)))
-
-(defun build (item-names tag-names step-names step-bodies 
-	      input-tag-names prescriptions item-sizes
-	      consumes produces
-	      &key (target-directory "") 
-	           (target-header-file "mccompiled.h") 
-	           (target-source-file "mccompiled.C"))
-  (let ((header (concatenate 'string target-directory target-header-file))
-	(source (concatenate 'string target-directory target-source-file)))
-    (format t "Generating header file... ")
-    (write-to-file header
-      (generate-header item-names 
-		       tag-names 
-		       step-names
-		       item-sizes))
-    (format t "done~%Generating source file... ")
-    (let ((*header-name* "mccompiled"))
-     (write-to-file source
-       (generate-source step-names step-bodies item-names
-			input-tag-names tag-names prescriptions consumes produces)))
-    (format t "done~%Written to ~A and ~A.~%" header source)))
+(defun generate-sink-calls (program)
+  (loop for item-collection in
+	     (output-item-collections program)
+	do (line "~A(ctx.~A, ~d);"
+		 (cnc::kernel-name (cnc::cnc-program-sink-kernel
+				    program))
+		 (cnc::cnc-item-collection-name item-collection)
+		 (cnc::cnc-item-collection-size item-collection))))

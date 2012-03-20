@@ -19,6 +19,8 @@
   utility-function-bodies
   source-kernel
   sink-kernel
+  input-item-collections
+  output-item-collections
   cache
 )
 
@@ -91,7 +93,8 @@
   name
   type
   size
-  tuner)
+  tuner
+  associated-tags)
 (defstruct (cnc-input-item-collection 
 	    (:include cnc-item-collection)))
 (defstruct (cnc-output-item-collection 
@@ -100,8 +103,7 @@
 (defstruct cnc-item-tuner
   name
   get-count
-  (deriving-from "CnC::hashmap_tuner")
-  )
+  (deriving-from "CnC::hashmap_tuner"))
 
 
 ;;; TAG COLLECTIONS
@@ -130,8 +132,7 @@
   (name (symbol-name (gensym "step_tuner_")))
   depends-body ;depends() body
   parameters
-  (deriving-from "CnC::step_tuner<>")
-  )
+  (deriving-from "CnC::step_tuner<>"))
 
 ;;; UTILITIES
 (defstruct formal-parameter

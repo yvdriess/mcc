@@ -31,7 +31,7 @@
 ;;;;  3.4 find-input-nodes
 ;;;; 4. Compiler Interface
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
+#+nil(eval-when (:compile-toplevel :load-toplevel :execute)
   (ql:quickload 'alexandria)
   (declaim (optimize (speed 0) (debug 3) (safety 3))))
 
@@ -438,6 +438,11 @@ predicate to its _content_."
 	(expt 2 tangle-position)
 	(error "Could not find Qubit ~A in Tangle ~A~%" qubit tangle))))
 
+(defun tangle-size (tangle)
+  (declare (type tangle tangle))
+  "Returns the number of amplitudes needed to represent this tangle,
+power of two of the tangle size"
+  (expt 2 (length (tangle-qubits tangle))))
 
 ;;; 3.2.2 Signal Map
 
@@ -701,6 +706,9 @@ connections to the program graph."
   (let ((input-nodes (find-input-nodes operation program-graph)))
     (merge-program-graphs program-graph 
 			  (make-operation-graph operation input-nodes))))
+
+;;;; MC GRAPH INTERFACE
+(defun output-tangles (mc-graph))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;  Misc. Utility Functions ;;;;

@@ -398,9 +398,9 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 
 (defun generate-source-calls (program)
   (loop for item-collection in
-	     (input-item-collections program)
-	for tag-collection in 
-	     (input-tag-collections program)
+	     (cnc::cnc-program-input-item-collections program)
+	for tag-collection = 
+	     (cnc::cnc-item-collection-associated-tags item-collection)
 	do (line "~A(ctx.~A, ctx.~A, ~d);"
 		 (cnc::kernel-name (cnc::cnc-program-source-kernel
 				    program))
@@ -410,7 +410,7 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 
 (defun generate-sink-calls (program)
   (loop for item-collection in
-	     (output-item-collections program)
+	     (cnc::cnc-program-output-item-collections program)
 	do (line "~A(ctx.~A, ~d);"
 		 (cnc::kernel-name (cnc::cnc-program-sink-kernel
 				    program))

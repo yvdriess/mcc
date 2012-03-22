@@ -19,13 +19,12 @@
 ;;;; THE SOFTWARE.
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (ql:quickload 'alexandria)
   (declaim (optimize (speed 0) (debug 3) (safety 3))))
 
 (defpackage :cnc-generator
   (:nicknames :cnc-gen)
   (:use :cl :cnc)
-  (:import-from alexandria compose mappend with-gensyms)
+  (:import-from alexandria with-gensyms)
   (:export build))
 
 (in-package :cnc-gen)
@@ -68,8 +67,12 @@
 
 #include <cnc/cnc.h>
 #include <cnc/debug.h>
+#include <cnc/default_tuner.h>
 
 typedef std::complex<double> amplitude;
+
+typedef CnC::item_collection<int, amplitude>& tangle_items_type;
+typedef CnC::tag_collection<int>& tangle_tags_type;
 
 struct context;
 ")
@@ -175,12 +178,16 @@ struct context;
   ;; step tuners, actuals will come from cnc-item-collection's actual parameters
   (loop for step-tuner in (mapcar #'cnc::kernel-tuner 
 				  (distinct-kernels program))
-	do (with-slots (name body parameters deriving-from) step-tuner
-	     (line "struct ~A : public ~S {" name deriving-from)
+	when step-tuner
+	do (with-accessors ((name cnc::cnc-step-tuner-name) 
+			    (body cnc::cnc-step-tuner-depends-body) 
+			    (parameters cnc::cnc-step-tuner-parameters) 
+			    (deriving-from cnc::cnc-step-tuner-deriving-from)) step-tuner
+	     (line "struct ~A : public ~A {" name deriving-from)
 	     (indented 
 	      (generate-ctor-and-members name parameters)
 	      (line "template< class dependency_consumer >")
-	      (line "void depends( const int& t, fib_context& c, dependency_consumer& dC ) const {")
+	      (line "void depends( const int& t, context& c, dependency_consumer& dC ) const {")
 	      (indented (line body))
 	      (line "}"))
 	     (line "}")
@@ -207,8 +214,8 @@ struct context;
 	  (step-kernel-names program)
 	  (step-names program))
    (lines "CnC::item_collection< int, ~A > ~A;" 
-	  (item-names program)
-	  (item-types program))
+	  (item-types program)
+	  (item-names program))
    (lines "CnC::tag_collection< int > ~A;" 
 	  (tag-names program))
    (line  "context();")
@@ -225,31 +232,9 @@ struct context;
   (generate-step-headers program)
   (newline)
   ;; declare/define pervasive functions such as permute
-  (lines "~S" (cnc::cnc-program-utility-function-bodies program))
+  (lines "~A" (cnc::cnc-program-utility-function-bodies program))
   (generate-context-header program)
   (line "#endif"))
-
-
-;;;;;;;;;;;;;;;
-;;;; BUILD ;;;;
-;;;;;;;;;;;;;;;
-
-(defun build (program
-	      &key (target-directory "") 
-	           (target-filename "mccompiled"))
-  "Entry point for code generation; call with an cnc-program object
-	      representing the cnc program to be generated."
-  (declare (type cnc::cnc-program program))
-  (let ((header (concatenate 'string target-directory target-filename ".h"))
-	(source (concatenate 'string target-directory target-filename ".C")))
-    (format t "Generating header file... ")
-    (write-to-file header
-      (generate-header program))
-    (format t "done~%Generating source file... ")
-    #+nil(let ((*header-name* (concatenate 'string target-filename ".h")))
-     (write-to-file source
-       (generate-source program)))
-    (format t "done~%Written to ~A and ~A.~%" header source)))
 
 
 ;;;; SOURCE FILE GENERATORS ;;;;
@@ -263,7 +248,7 @@ struct context;
   (generate-main-source program)
   (generate-context-constructor-source program)
   (generate-step-source program)
-  
+  (generate-source-sink-functions program)
   )
 
 (defun generate-main-source (program)
@@ -323,13 +308,10 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
     (line "}~%")))
 
 (defun generate-step-instance (step)
-  (with-slots (name 
-	       kernel
-	       parameter-bindings) step 
-    (format nil "step_~A(~{~A~^,~})"
-	    (cnc::kernel-name kernel)
-	    (mapcar #'cnc::actual-parameter-value parameter-bindings))))
-
+  (format nil "step_~A(~{~A~^,~})"
+	  (cnc::kernel-name (cnc::cnc-step-collection-kernel step))
+	  (mapcar #'cnc::actual-parameter-value 
+		  (cnc::cnc-step-collection-parameter-bindings step))))
 
 (defun generate-tuner-instance (step)
   (with-slots (kernel
@@ -341,8 +323,7 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 	      ;; collections and the matching parameters
 	      (append (cnc::kernel-consumes kernel)
 		      (match-parameter-values parameters
-					      parameter-bindings)))))
-  )
+					      parameter-bindings))))))
 
 
 (defun generate-context-constructor-source (program)
@@ -356,8 +337,9 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 ;	     (mapcar #'generate-tuner-instance (cnc::cnc-program-steps
 ;program))
 	     )
-      (lines "~A( *this , \"~:*~A\" )" (item-names program))
-      (lines "~A( *this , \"~:*~A\" )" (tag-names program))
+      (lines "~A( *this , \"~:*~A\" )," (item-names program))
+      (comma-seperated
+	(lines "~A( *this , \"~:*~A\" )" (tag-names program)))
       (indented
 	(line "{")
 	(indented
@@ -387,7 +369,7 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 	     (line "int step_~A::execute(const int & t, context & c ) const {" 
 		   (cnc::kernel-name kernel))
 	     (indented 
-	       (let ((formals (mapcar #'cnc::kernel-parameters kernel)))
+	       (let ((formals (cnc::kernel-parameters kernel)))
 		 (lines "~A ~A;" 
 			(mapcar #'cnc::formal-parameter-type formals)
 			(mapcar #'cnc::formal-parameter-name formals)))
@@ -416,3 +398,43 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 				    program))
 		 (cnc::cnc-item-collection-name item-collection)
 		 (cnc::cnc-item-collection-size item-collection))))
+
+(defun generate-source-sink-functions (program)
+  (let ((source-kernel (cnc::cnc-program-sink-kernel program))
+	(sink-kernel (cnc::cnc-program-sink-kernel program)))
+    ;; todo fill in signature from kernel consumes/params
+    (line "~%void ~A(tangle_items_type out_items, tangle_tags_type out_tags, int size) {" 
+	  (cnc::kernel-name source-kernel))
+    (indented
+      (line (cnc::kernel-body source-kernel)))
+    (line "}~%")
+    (line "~%void ~A(tangle_items_type in_items, int size) {"
+	  (cnc::kernel-name sink-kernel))
+    (indented
+      (line (cnc::kernel-body sink-kernel)))
+    (line "}~%")))
+
+;;;;;;;;;;;;;;;
+;;;; BUILD ;;;;
+;;;;;;;;;;;;;;;
+
+(defun build (program
+	      &key (target-directory "") 
+	           (target-filename "mccompiled"))
+  "Entry point for code generation; call with an cnc-program object
+	      representing the cnc program to be generated."
+  (declare (type cnc::cnc-program program))
+  (let ((header (concatenate 'string target-directory target-filename ".h"))
+	(source (concatenate 'string target-directory target-filename
+	      ".C"))
+	(*print-case* :downcase))
+    (format t "Generating header file... ")
+    (write-to-file header
+      (generate-header program))
+    (format t "done~%Generating source file...")
+    (let ((*header-name* (concatenate 'string target-filename ".h")))
+     (write-to-file source
+       (generate-source program)))
+    (format t "done~%Written to ~A and ~A.~%" header source)))
+
+

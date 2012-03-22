@@ -137,7 +137,9 @@
   lookup-flags
   qubit-flags)
 
-(defstruct ag-operation)
+(defstruct operation)
+
+(defstruct (ag-operation (:include operation)))
 
 (defstruct (ag-entanglement (:include ag-operation))
   (qubit-1 0 :type #.+qubit-id-type+)
@@ -457,8 +459,6 @@ power of two of the tangle size"
 
 ;; Datastructures (see also ag-operations)
 
-(defstruct operation)
-
 (defstruct (kronecker-operation (:include operation))
   qubit-1
   qubit-2)
@@ -707,9 +707,6 @@ connections to the program graph."
     (merge-program-graphs program-graph 
 			  (make-operation-graph operation input-nodes))))
 
-;;;; MC GRAPH INTERFACE
-(defun output-tangles (mc-graph))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;  Misc. Utility Functions ;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -717,6 +714,72 @@ connections to the program graph."
 (defun between (i min max)
   (and (>= i min)
        (<= i max)))
+
+
+;;;; PRINT GRAPH TO GRAPHVIZ ;;;;
+
+(defun dot-node-label (node graph)
+  (declare (ignore graph))
+  (let ((content (node-content node)))
+    (typecase content
+      (mcg::tangle (format nil "Tangle { ~{~S ~}}" 
+		      (mcg::tangle-qubits content)))
+      (mcg::ag-entanglement 
+       (format nil "Entangle (~A, ~A)"
+	       (mcg::ag-entanglement-qubit-1 content)
+	       (mcg::ag-entanglement-qubit-2 content)))
+      (mcg::ag-measurement 
+       (format nil "Measure ~A" 
+	       (mcg::ag-measurement-qubit content)))
+      (mcg::ag-X-correction (format nil "X ~A" (mcg::ag-correction-qubit content)))
+      (mcg::ag-Z-correction (format nil "Z ~A" (mcg::ag-correction-qubit content)))
+      (mcg::kronecker-operation (format nil "Kronecker Product"))
+      ;; ;;;; cnc nodes
+      ;; (cnc-tangle (format nil "Tangle [ ~{~S ~}]" 
+      ;; 			  (mcg::tangle-qubits (cnc-tangle-tangle content))))
+      ;; (cnc-entanglement-operation 
+      ;;  (format nil "~A (~A, ~A)"
+      ;; 	       (cnc::kernel-name (cnc-operation-step-kernel content)) 
+      ;; 	       (cnc-entanglement-operation-qubit content)
+      ;; 	       (cnc-entanglement-operation-qubit-2 content)))
+      ;; (cnc-operation
+      ;;  (format nil "~A (~A)"
+      ;; 	       (cnc::kernel-name (cnc-operation-step-kernel content)) 
+      ;; 	       (cnc-operation-qubit content)))
+      ;; (cnc-signal 
+      ;;  "Signal-map")
+      (otherwise (node-label node)))))
+
+(defun dot-node-shape (node graph)
+  (typecase (node-content node)
+    ((or mcg::ag-operation mcg::operation) "ellipse")
+    ((or mcg::tangle) "rectangle")
+    (otherwise (cond ((member node (graph-input-nodes graph))
+		      "triangle")
+		     ((member node (graph-output-nodes graph))
+		      "invtriangle")
+		     (t "diamond")))))
+
+(defun show-dot (graph)
+  (with-open-file (dotfile
+		   #P"/tmp/graph.dot" 
+		   :direction :output 
+		   :if-does-not-exist :create 
+		   :if-exists :supersede)
+    (format dotfile "digraph {~%" )
+    (loop for node in (graph-nodes graph)
+	  do (format dotfile "\"~A\" [label=\"~A\",shape=~A];~%" 
+		     (node-label node) 
+		     (dot-node-label node graph)
+		     (dot-node-shape node graph)))
+    (loop for node in (graph-nodes graph)
+	  do (loop for child-node in (node-downstream-nodes node)
+		   do (format dotfile "\"~A\" -> \"~A\" [];~%" (node-label node) (node-label child-node))))
+    (format dotfile "}~%" )
+    )
+  (format t "Dumped dot file in /tmp/graph.dot~%")
+					; (sb-ext:run-program "/Applications/Graphviz.app/Contents/MacOS/Graphviz" (list "/tmp/graph.dot"))
+  )
 
 
 

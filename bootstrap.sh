@@ -1,3 +1,4 @@
 #!/bin/bash
-sbcl --load cnc_generator.lisp --load graph.lisp --eval "(save-lisp-and-die \"mcc\" :executable t :toplevel #'mcc::mc-read-compile)"
-
+sbcl --load quicklisp.lisp \
+     --eval "(ql:quickload :mccompiler)" \
+     --eval "(save-lisp-and-die \"mcc\" :executable t :toplevel #'mcc::compile-to-cnc)"

@@ -2,7 +2,7 @@
 (defpackage :cnc-model
   (:nicknames :cnc)
   (:use :cl)
-  (:import-from alexandria with-gensyms  ensure-symbol )
+  (:import-from alexandria with-gensyms ensure-symbol compose)
   (:export defkernel distinct-kernels step-kernel-names step-names
 	   item-names item-types tag-names match-parameter-bindings
 	   input-item-collections input-tag-collections
@@ -55,37 +55,21 @@
   (mapcar #'cnc-step-collection-name (cnc-program-steps program)))
 
 (defun-cached-in-obj step-kernel-names (program)
-  (mapcar #'kernel-name 
-	  (cnc-step-collection-kernel (cnc-program-steps program))))
+  (mapcar #'kernel-name
+	  (mapcar #'cnc-step-collection-kernel 
+		  (cnc-program-steps program)))
+  #+nil(mapcar (compose #'kernel-name #'cnc-step-collection-kernel) 
+	  (cnc-program-steps program)))
 
 (defun-cached-in-obj tag-names (program)
   (mapcar #'cnc-tag-collection-name (cnc-program-tags program)))
 
-(defun-cached-in-obj input-item-collections (program)
-  (loop for item in (cnc-program-tags program)
-	when (cnc-input-item-collection-p item)
-	  collect item))
-
-(defun-cached-in-obj input-tag-collections (program)
-  (loop for tag in (cnc-program-tags program)
-	when (cnc-input-tag-collection-p tag)
-	  collect tag))
-
-(defun-cached-in-obj output-item-collections (program)
-  (loop for item in (cnc-program-tags program)
-	when (cnc-output-item-collection-p item)
-	  collect item))
-
-(defun-cached-in-obj output-tag-collections (program)
-  (loop for tag in (cnc-program-tags program)
-	when (cnc-output-tag-collection-p tag)
-	  collect tag))
-
 (defun-cached-in-obj distinct-kernels (program)
   (loop for step in (cnc-program-steps program)
 	for kernel = (cnc-step-collection-kernel step)
-	unless (member kernel distinct-kernels)
-	  collect kernel into distinct-kernels))
+	with kernels
+	do (pushnew kernel kernels :test #'equal)
+	finally (return kernels)))
 
 
 ;;; ITEM COLLECTIONS
@@ -95,10 +79,6 @@
   size
   tuner
   associated-tags)
-(defstruct (cnc-input-item-collection 
-	    (:include cnc-item-collection)))
-(defstruct (cnc-output-item-collection 
-	    (:include cnc-item-collection)))
 
 (defstruct cnc-item-tuner
   name
@@ -111,8 +91,8 @@
   name
   prescribes
   tuner)
-(defstruct (cnc-input-tag-collection (:include cnc-tag-collection)))
-(defstruct (cnc-output-tag-collection (:include cnc-tag-collection)))
+;(defstruct (cnc-input-tag-collection (:include cnc-tag-collection)))
+;(defstruct (cnc-output-tag-collection (:include cnc-tag-collection)))
 (defstruct cnc-tag-tuner
   (name "CnC::tag_tuner< tbb::blocked_range< int > >")
 )
@@ -234,11 +214,17 @@ the given cnc-program"
 (defun cnc-program-consumes (program)
   (loop for step in (cnc-program-steps program)
 	append (loop for item in (cnc-step-collection-consumes step)
-		     collect (cons (cnc-step-collection-name step)
-				   (cnc-item-collection-name item)))))
+		      collect (cons (cnc-step-collection-name step)
+				    (cnc-item-collection-name item)))))
 
 (defun cnc-program-controls (program)
   (loop for step in (cnc-program-steps program)
 	append (loop for tag in (cnc-step-collection-controls step)
 		     collect (cons (cnc-step-collection-name step)
 				   (cnc-tag-collection-name tag)))))
+
+
+
+
+
+

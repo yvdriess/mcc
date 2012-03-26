@@ -164,7 +164,7 @@ static int n(0);
 printf(\"tangle %d:\\n\", n++);
 for( int i(0) ; i < size ; ++i ) {
   amplitude amp;
-  in_items.get(i, &amp);
+  in_items.get(i, amp);
   printf(\"  [%d]: (%1.4f,%1.4f) \\n\", i, amp.real(), amp.imag());
 }
 ")

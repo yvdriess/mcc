@@ -470,7 +470,7 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 				item-index))
 	     do (loop for tag in controls
 		      for tag-index = (get-tag-index tag program)
-		      do (line "~A.controls( tags.[~d] );"
+		      do (line "~A.controls( tags[~d] );"
 			       step-name
 			       tag-index)))))
     (line "}~%"))))

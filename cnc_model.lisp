@@ -15,11 +15,14 @@
 	   formal-parameter-name formal-parameter-type
 	   make-formal-parameter cnc-step-collection-produces
 	   cnc-step-collection-consumes cnc-step-collection-controls
-	   cnc-step-collection-kernel cnc-program-items cnc-program-tags
+	   cnc-step-collection-kernel cnc-program-items cnc-step-collection-name
+	   cnc-program-tags cnc-program-steps
 	   cnc-step-collection-parameter-bindings
 	   actual-parameter-value actual-parameter-name
 	   cnc-item-collection cnc-tag-collection cnc-step-collection
-  ))
+	   cnc-item-collection-name cnc-tag-collection-name 
+	   cnc-tag-collection-prescribes
+	   ))
 
 (in-package :cnc-model)
 

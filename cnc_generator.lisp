@@ -437,22 +437,42 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
    (indented
     (line "{")
     (indented
-     (let ((prescriptions (cnc-program-prescriptions program))
-	   (consumes (cnc-program-consumes program))
-	   (produces (cnc-program-produces program))
-	   (controls (cnc-program-controls program)))
-       (lines "~A.prescribes( ~A, *this );"
-	      (mapcar #'car prescriptions)
-	      (mapcar #'cdr prescriptions))
-       (lines "~A.consumes( ~A );"
-	      (mapcar #'car consumes)
-	      (mapcar #'cdr consumes))
-       (lines "~A.produces( ~A );"
-	      (mapcar #'car produces)
-	      (mapcar #'cdr produces))
-       (lines "~A.controls( ~A );"
-	      (mapcar #'car controls)
-	      (mapcar #'cdr controls))))
+     (let (;(prescriptions (cnc-program-prescriptions program))
+	   ;(consumes (cnc-program-consumes program))
+	   ;(produces (cnc-program-produces program))
+	   ;(controls (cnc-program-controls program))
+	   )
+       ;; TODO would be interesting to see difference between unrolled
+       ;; and for loop version
+       (loop for tag in (cnc-program-tags program)
+	     for tag-index = (get-tag-index tag program)
+	     for index from 0
+	     do (assert (= tag-index index))
+	     do (loop for step in (cnc-tag-collection-prescribes tag)
+		      for step-name = (cnc-step-collection-name step)
+		      do (line "tags[~d].prescribes(~A, *this)" 
+			       index
+			       step)))
+       (loop for step in (cnc-program-steps program)
+	     for step-name = (cnc-step-collection-name step)
+	     for produces = (cnc-step-collection-produces step)
+	     for consumes = (cnc-step-collection-consumes step)
+	     for controls = (cnc-step-collection-controls step)
+	     do (loop for item in consumes
+		      for item-index = (get-item-index item program)
+		      do (line "~A.consumes( items[~d] );" 
+			       step-name
+			       item-index))
+	     do (loop for item in produces
+		      for item-index = (get-item-index item program)
+		      do (line "~A.produces( items[~d] );"
+				step-name
+				item-index))
+	     do (loop for tag in controls
+		      for tag-index = (get-tag-index tag program)
+		      do (line "~A.controls( tags.[~d] );"
+			       step-name
+			       tag-index)))))
     (line "}~%"))))
 
 

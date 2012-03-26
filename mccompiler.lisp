@@ -19,7 +19,7 @@
 
 (defvar *kron-depends-body*
   "
-for( int t(0) ; t < size_2 ; ++i ) {
+for( int t(0) ; t < size_2 ; ++t ) {
   dC.depends( tangle_2 , t );
 }
 ")
@@ -94,7 +94,7 @@ if ( (i & qid) == 0 ) {
   in_tangle.get( i  , a_i1 );
   in_tangle.get( i2 , a_i2 );
   const amplitude new_amp = a_i1 - a_i2 * phi_1;
-  const unsigned new_index = compact_bit_index(i,qid);
+  const unsigned int new_index = compact_bit_index(i,qid);
   out_tangle.put( new_index , new_amp );
   out_tags.put( new_index );
 }
@@ -304,7 +304,7 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 	    type "amplitude"
 	    size (mcg::tangle-size content))
       (setf associated-tags 
-	    (cnc::make-cnc-tag-collection :name (format nil "item_~A" id)))
+	    (cnc::make-cnc-tag-collection :name (format nil "tag_tangle_~A" id)))
 
       )))
 

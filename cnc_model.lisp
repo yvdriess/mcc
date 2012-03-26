@@ -6,9 +6,20 @@
   (:export defkernel distinct-kernels step-kernel-names step-names
 	   item-names item-types tag-names match-parameter-bindings
 	   input-item-collections input-tag-collections
-	   output-item-collections output-tag-collections
+	   output-item-collections output-tag-collections cnc-program
 	   cnc-program-prescriptions cnc-program-consumes 
-	   cnc-program-produces cnc-program-controls match-parameter-values))
+	   cnc-program-produces cnc-program-controls
+	   match-parameter-values kernel-p kernel kernel-name
+	   kernel-consumes kernel-parameters kernel-produces
+	   kernel-body kernel-tuners kernel-controls formal-parameter
+	   formal-parameter-name formal-parameter-type
+	   make-formal-parameter cnc-step-collection-produces
+	   cnc-step-collection-consumes cnc-step-collection-controls
+	   cnc-step-collection-kernel cnc-program-items cnc-program-tags
+	   cnc-step-collection-parameter-bindings
+	   actual-parameter-value actual-parameter-name
+	   cnc-item-collection cnc-tag-collection cnc-step-collection
+  ))
 
 (in-package :cnc-model)
 
@@ -70,7 +81,6 @@
 	with kernels
 	do (pushnew kernel kernels :test #'equal)
 	finally (return kernels)))
-
 
 ;;; ITEM COLLECTIONS
 (defstruct cnc-item-collection

@@ -64,17 +64,36 @@
 #include <complex>
 #include <stdlib.h>
 #include <unistd.h>
+#include <new>
 
 #include <cnc/cnc.h>
 #include <cnc/debug.h>
 #include <cnc/default_tuner.h>
 
+
 typedef std::complex<double> amplitude;
 
-typedef CnC::item_collection<int, amplitude>& tangle_items_type;
-typedef CnC::tag_collection<int>& tangle_tags_type;
+typedef CnC::item_collection<int, amplitude> tangle_items_type;
+typedef CnC::tag_collection<int> tangle_tags_type;
 
 struct context;
+
+template<class collection, size_t size>
+class collection_array {
+public:
+  void* raw;
+  collection_array(context& c) {
+	raw = operator new[]( size*sizeof(collection) );
+	collection *ptr = static_cast<collection*>( raw );
+	for( int i = 0; i < size; ++i ) {
+	  new( &ptr[i] )collection( c );
+	}
+  }
+  collection& operator[]( size_t i ) const {
+	  return static_cast<collection*>( raw )[i]; 
+  }
+};
+
 ")
  
  
@@ -160,32 +179,36 @@ struct context;
   (let ((parameter-names (mapcar #'cnc::formal-parameter-name 
 				 formal-parameters))
 	(parameter-types (mapcar #'cnc::formal-parameter-type 
-				 formal-parameters)))
+				 formal-parameters))
+	)
     ;; data members
-    (lines "~A ~A;" parameter-types parameter-names)
+    (lines "const ~A ~A;" parameter-types parameter-names)
     ;; constructor
     (line "~A(" name)
     (indented 
-     (comma-seperated
-      (lines " ~A _~A" parameter-types parameter-names)
-      (line "): ")
-      (indented
-       (comma-seperated 
-	(lines "~A(_~:*~A)" parameter-names))
-       (line "{};"))))))
+      (comma-seperated
+	(lines "~A _~A" parameter-types parameter-names)
+	(line "): ")
+	(indented
+	  (comma-seperated 
+	    (lines "~A(_~:*~A)" parameter-names))
+	  (line "{};"))))))
 
-(defun generate-tuners (program)
+#+nil(defun generate-tuners (program)
   ;; step tuners, actuals will come from cnc-item-collection's actual parameters
   (loop for step-tuner in (mapcar #'cnc::kernel-tuner 
 				  (distinct-kernels program))
 	when step-tuner
 	do (with-accessors ((name cnc::cnc-step-tuner-name) 
 			    (body cnc::cnc-step-tuner-depends-body) 
-			    (parameters cnc::cnc-step-tuner-parameters) 
+			    (parameters cnc::cnc-step-tuner-parameters)
 			    (deriving-from cnc::cnc-step-tuner-deriving-from)) step-tuner
 	     (line "struct ~A : public ~A {" name deriving-from)
 	     (indented 
-	      (generate-ctor-and-members name parameters)
+	      (generate-ctor-and-members name 
+					 consumes
+					 produces
+					 parameters)
 	      (line "template< class dependency_consumer >")
 	      (line "void depends( const int& t, context& c, dependency_consumer& dC ) const {")
 	      (indented (line body))
@@ -193,13 +216,35 @@ struct context;
 	     (line "}")
 	   )))
 
+
+#|
+(:consumes tangle_1 tangle_2)
+(:produces tangle_out)
+(:controls tag_out)
+(:parameters (size_2 int)) 
+|#
+
+(defun make-dependency-parameters (kernel)
+    (declare (type kernel kernel))
+  (append (loop for dependency-name in (append (kernel-consumes kernel)
+					       (kernel-produces kernel)
+					       (kernel-controls kernel))
+		collect (make-formal-parameter 
+			 :name (dependency-index-name dependency-name)
+			 :type "size_t"))))
+
+(defun dependency-index-name (name)
+  (format nil "index_to_~A" name))
+
+
 (defun generate-step-header (kernel)
-  (let* ((name (format nil "step_~A" (cnc::kernel-name kernel)))
-	 (parameters (cnc::kernel-parameters kernel)))
+  (let ((name (format nil "step_~A" (kernel-name kernel))))
     (line "~%struct ~A {" name)
     (indented
-     (generate-ctor-and-members name parameters)
-     (line "int execute( const int& t, context& c ) const;"))
+      (generate-ctor-and-members name
+				 (append (make-dependency-parameters kernel) 
+					 (kernel-parameters kernel)))
+      (line "int execute( const int& t, context& c ) const;"))
     (line "};")))
 
 (defun generate-step-headers (program)
@@ -213,26 +258,39 @@ struct context;
    (lines "CnC::step_collection< step_~A > ~A;" 
 	  (step-kernel-names program)
 	  (step-names program))
-   (lines "CnC::item_collection< int, ~A > ~A;" 
-	  (item-types program)
-	  (item-names program))
-   (lines "CnC::tag_collection< int > ~A;" 
-	  (tag-names program))
+   (line "collection_array< tangle_items_type, ~A> items;" 
+	 (length (cnc::cnc-program-items program)))
+   (line "collection_array< tangle_tags_type, ~A> tags;"
+	 (length (cnc::cnc-program-tags program)))
    (line  "context();")
    )
   (line "};~%"))
 
-(defun generate-utility-headers ())
+(defun generate-source-sink-functions (program)
+  (let ((source-kernel (cnc::cnc-program-source-kernel program))
+	(sink-kernel (cnc::cnc-program-sink-kernel program)))
+    ;; todo fill in signature from kernel consumes/params
+    (line "~%void ~A(tangle_items_type& out_items, tangle_tags_type out_tags, int size) {" 
+	  (cnc::kernel-name source-kernel))
+    (indented
+      (line (cnc::kernel-body source-kernel)))
+    (line "}~%")
+    (line "~%void ~A(tangle_items_type& in_items, int size) {"
+	  (cnc::kernel-name sink-kernel))
+    (indented
+      (line (cnc::kernel-body sink-kernel)))
+    (line "}~%")))
 
 (defun generate-header (program)
   ;; preamble
   (line #.*MIT-license*)
   (line #.*header-preamble*)
-  (generate-tuners program)
+  ;(generate-tuners program)
   (generate-step-headers program)
   (newline)
   ;; declare/define pervasive functions such as permute
   (lines "~A" (cnc::cnc-program-utility-function-bodies program))
+  (generate-source-sink-functions program)
   (generate-context-header program)
   (line "#endif"))
 
@@ -247,9 +305,7 @@ struct context;
   (line "#include \"~A\"~%" *header-name*)
   (generate-main-source program)
   (generate-context-constructor-source program)
-  (generate-step-source program)
-  (generate-source-sink-functions program)
-  )
+  (generate-step-source program))
 
 (defun generate-main-source (program)
   (let ()
@@ -289,7 +345,7 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 
       (line "if (debug_level) { ")
       (indented
-	(line "CnC::debug::trace_all(ctx, \"context\");")
+	(line "//CnC::debug::trace_all(ctx, \"context\");")
 	(line "CnC::debug::collect_scheduler_statistics(ctx);")
 	)
       (line "}~%")
@@ -307,11 +363,41 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
       (line "return CnC::CNC_Success;"))
     (line "}~%")))
 
-(defun generate-step-instance (step)
-  (format nil "step_~A(~{~A~^,~})"
-	  (cnc::kernel-name (cnc::cnc-step-collection-kernel step))
-	  (mapcar #'cnc::actual-parameter-value 
-		  (cnc::cnc-step-collection-parameter-bindings step))))
+
+#+nil(
+ (:consumes tangle_1 tangle_2)
+ (:produces tangle_out)
+ (:controls tag_out)
+ (:parameters (size_2 int)))
+
+(defun verify-dependencies-with-kernel-p (step kernel)
+  (and (= (length (kernel-consumes kernel))
+	  (length (cnc-step-collection-consumes step)))
+       (= (length (kernel-produces kernel))
+	  (length (cnc-step-collection-produces step)))
+       (= (length (kernel-controls kernel))
+	  (length (cnc-step-collection-controls step)))))
+
+(defun generate-step-instance (step program)
+  "Genererates a step collection instantiation, calling its constructor"
+  (let ((kernel (cnc-step-collection-kernel step)))
+    (assert (verify-dependencies-with-kernel-p step kernel))
+    ;; using the order with which the step kernel ctor was defined:
+    ;; consumes, produces, controls and then parameters
+    (flet ((item-index (item) 
+	     (declare (type cnc-item-collection item))
+	     (position item (cnc-program-items program)))
+	   (tag-index (tag)
+	     (declare (type cnc-tag-collection tag))
+	     (position tag (cnc-program-tags program))))
+      (format nil "step_~A(~{~A~^,~})"
+	      (cnc::kernel-name (cnc-step-collection-kernel step))
+	      (append
+	       (mapcar #'item-index (cnc-step-collection-consumes step))
+	       (mapcar #'item-index (cnc-step-collection-produces step))
+	       (mapcar #'tag-index (cnc-step-collection-controls step))
+	       (mapcar #'actual-parameter-value 
+		       (cnc-step-collection-parameter-bindings step)))))))
 
 (defun generate-tuner-instance (step)
   (with-slots (kernel
@@ -321,45 +407,56 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 	      name
 	      ;; cheating a bit, pass all the consumes item
 	      ;; collections and the matching parameters
-	      (append (cnc::kernel-consumes kernel)
+	      (append (kernel-consumes kernel)
 		      (match-parameter-values parameters
 					      parameter-bindings))))))
 
-
 (defun generate-context-constructor-source (program)
   (line "context::context(): ")
-    (indented 
-      (line "CnC::context< context >(),")
-      ;; instantiate step collection data members
-      (lines "~A( *this , \"~:*~A\", ~A)," 
-	     (step-names program)
-	     (mapcar #'generate-step-instance (cnc::cnc-program-steps program))
-;	     (mapcar #'generate-tuner-instance (cnc::cnc-program-steps
-;program))
-	     )
-      (lines "~A( *this , \"~:*~A\" )," (item-names program))
-      (comma-seperated
-	(lines "~A( *this , \"~:*~A\" )" (tag-names program)))
-      (indented
-	(line "{")
-	(indented
-	  (let ((prescriptions (cnc-program-prescriptions program))
-		(consumes (cnc-program-consumes program))
-		(produces (cnc-program-produces program))
-		(controls (cnc-program-controls program)))
-	   (lines "~A.prescribes( ~A, *this );"
-		  (mapcar #'car prescriptions)
-		  (mapcar #'cdr prescriptions))
-	    (lines "~A.consumes( ~A );"
-		   (mapcar #'car consumes)
-		   (mapcar #'cdr consumes))
-	    (lines "~A.produces( ~A );"
-		   (mapcar #'car produces)
-		   (mapcar #'cdr produces))
-	    (lines "~A.controls( ~A );"
-		   (mapcar #'car controls)
-		   (mapcar #'cdr controls))))
-	(line "}~%"))))
+  (indented 
+   (line "CnC::context< context >(),")
+   ;; instantiate step collection data members
+   (lines "~A( *this , \"~:*~A\", ~A)," 
+	  (step-names program)
+	  (mapcar #'(lambda (step) (generate-step-instance step program))
+		  (cnc::cnc-program-steps program))
+					;	     (mapcar #'generate-tuner-instance (cnc::cnc-program-steps
+					;program))				;
+	  )
+   (line "items(*this);")
+   (line "tags(*this);")
+   ;; (lines "~A( *this , \"~:*~A\" )," (item-names program))
+   ;; (comma-seperated
+   ;; 	(lines "~A( *this , \"~:*~A\" )" (tag-names program)))
+   (indented
+    (line "{")
+    (indented
+     (let ((prescriptions (cnc-program-prescriptions program))
+	   (consumes (cnc-program-consumes program))
+	   (produces (cnc-program-produces program))
+	   (controls (cnc-program-controls program)))
+       (lines "~A.prescribes( ~A, *this );"
+	      (mapcar #'car prescriptions)
+	      (mapcar #'cdr prescriptions))
+       (lines "~A.consumes( ~A );"
+	      (mapcar #'car consumes)
+	      (mapcar #'cdr consumes))
+       (lines "~A.produces( ~A );"
+	      (mapcar #'car produces)
+	      (mapcar #'cdr produces))
+       (lines "~A.controls( ~A );"
+	      (mapcar #'car controls)
+	      (mapcar #'cdr controls))))
+    (line "}~%"))))
+
+
+#+nil(defun make-dependency-parameters (kernel)
+       (declare (type kernel kernel))
+       (append (loop for dependency-name in (append (kernel-consumes kernel)
+						    (kernel-produces kernel)
+						    (kernel-controls kernel))
+		     collect (make-formal-parameter :name dependency-name
+						    :type "size_t"))))
 
 
 (defun generate-step-source (program)
@@ -369,10 +466,18 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 	     (line "int step_~A::execute(const int & t, context & c ) const {" 
 		   (cnc::kernel-name kernel))
 	     (indented 
-	       (let ((formals (cnc::kernel-parameters kernel)))
-		 (lines "~A ~A;" 
-			(mapcar #'cnc::formal-parameter-type formals)
-			(mapcar #'cnc::formal-parameter-name formals)))
+	       (lines "tangles_items_type& ~A(c.items[~A]);"
+		      (cnc::kernel-consumes kernel)
+		      (mapcar #'dependency-index-name
+			      (cnc::kernel-consumes kernel)))
+	       (lines "tangles_items_type& ~A(c.items[~A]);"
+		      (cnc::kernel-produces kernel)
+		      (mapcar #'dependency-index-name
+			      (cnc::kernel-produces kernel)))
+	       (lines "tangles_tags_type& ~A(c.tags[~A]);"
+		      (cnc::kernel-controls kernel)
+		      (mapcar #'dependency-index-name
+			      (cnc::kernel-controls kernel)))
 	       (line (cnc::kernel-body kernel))
 	       (newline)
 	       (line "return CnC::CNC_Success;"))
@@ -399,21 +504,6 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 		 (cnc::cnc-item-collection-name item-collection)
 		 (cnc::cnc-item-collection-size item-collection))))
 
-(defun generate-source-sink-functions (program)
-  (let ((source-kernel (cnc::cnc-program-sink-kernel program))
-	(sink-kernel (cnc::cnc-program-sink-kernel program)))
-    ;; todo fill in signature from kernel consumes/params
-    (line "~%void ~A(tangle_items_type out_items, tangle_tags_type out_tags, int size) {" 
-	  (cnc::kernel-name source-kernel))
-    (indented
-      (line (cnc::kernel-body source-kernel)))
-    (line "}~%")
-    (line "~%void ~A(tangle_items_type in_items, int size) {"
-	  (cnc::kernel-name sink-kernel))
-    (indented
-      (line (cnc::kernel-body sink-kernel)))
-    (line "}~%")))
-
 ;;;;;;;;;;;;;;;
 ;;;; BUILD ;;;;
 ;;;;;;;;;;;;;;;
@@ -425,16 +515,14 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 	      representing the cnc program to be generated."
   (declare (type cnc::cnc-program program))
   (let ((header (concatenate 'string target-directory target-filename ".h"))
-	(source (concatenate 'string target-directory target-filename
-	      ".C"))
+	(source (concatenate 'string target-directory target-filename ".C"))
 	(*print-case* :downcase))
     (format t "Generating header file... ")
     (write-to-file header
       (generate-header program))
     (format t "done~%Generating source file...")
     (let ((*header-name* (concatenate 'string target-filename ".h")))
-     (write-to-file source
-       (generate-source program)))
-    (format t "done~%Written to ~A and ~A.~%" header source)))
+     (write-to-file source (generate-source program)))
+    (format t "done~%Written in ~A to ~A and ~A.~%" target-directory header source)))
 
 

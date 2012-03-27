@@ -83,10 +83,12 @@ class collection_array {
 public:
   void* raw;
   collection_array(context& c) {
+        char str[16];
 	raw = operator new[]( size*sizeof(collection) );
 	collection *ptr = static_cast<collection*>( raw );
 	for( int i = 0; i < size; ++i ) {
-	  new( &ptr[i] )collection( c );
+          sprintf(str,\"col_%d\",i);
+	  new( &ptr[i] )collection( c, str );
 	}
   }
   collection& operator[]( size_t i ) const {
@@ -270,7 +272,7 @@ public:
   (let ((source-kernel (cnc::cnc-program-source-kernel program))
 	(sink-kernel (cnc::cnc-program-sink-kernel program)))
     ;; todo fill in signature from kernel consumes/params
-    (line "~%void ~A(tangle_items_type& out_items, tangle_tags_type out_tags, int size) {" 
+    (line "~%void ~A(tangle_items_type& out_items, tangle_tags_type& out_tags, int size) {" 
 	  (cnc::kernel-name source-kernel))
     (indented
       (line (cnc::kernel-body source-kernel)))
@@ -345,7 +347,19 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 
       (line "if (debug_level) { ")
       (indented
+	(line "// doesn't work on CnC 0.7 anymore")
 	(line "//CnC::debug::trace_all(ctx, \"context\");")
+	(line "for( int i(0); i<~d; ++i)"
+	      (length (cnc-program-items program)))
+	(indented 
+	  (line "CnC::debug::trace( ctx.items[i] );"))
+	(line "for( int i(0); i<~d; ++i)"
+	      (length (cnc-program-tags program)))
+	(indented 
+	  (line "CnC::debug::trace( ctx.tags[i] );"))
+	(loop for step in (cnc-program-steps program)
+	      do (line "CnC::debug::trace( ctx.~A );"
+		       (cnc-step-collection-name step)))
 	(line "CnC::debug::collect_scheduler_statistics(ctx);")
 	)
       (line "}~%")

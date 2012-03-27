@@ -5,11 +5,11 @@ ifeq ($(M_UNAME), i686)
 ARCH := ia32
 endif
 
-ifeq (,$(CNC_INSTALL_DIR))
+ifeq (,$(CNCROOT))
 $(info Please estblish CnC environment variables before using this Makefile.)
 $(info E.g. by running cncvars.sh or cncvars.csh)
 $(info More information is available in 'Getting Started > Running the samples')
-$(error CNC_INSTALL_DIR is not set)
+$(error CNCROOT is not set)
 endif
 
 CPPFLAGS := -O2 #-Wall -O2 #-g3 -pg 
@@ -27,10 +27,10 @@ DEST_OBJS=$(SOURCES:.C=.o)
 all:  mccompiled
 
 mccompiled: $(DEST_OBJS)
-	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNC_INSTALL_DIR)/lib/$(ARCH) -lrt -lcnc -ltbb -ltbbmalloc 
+	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNCROOT)/lib/$(ARCH) -lrt -lcnc -ltbb -ltbbmalloc 
 
 %.o: %.C %.h
-	$(CXX) $(CPPFLAGS) -c -I$(CNC_INSTALL_DIR)/include -o $@ $<
+	$(CXX) $(CPPFLAGS) -c -I$(CNCROOT)/include -o $@ $<
 
 clean:
 	rm -f $(TARGETS) $(DEST_OBJS)

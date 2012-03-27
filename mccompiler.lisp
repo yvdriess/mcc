@@ -40,15 +40,15 @@ if ( (t & qid) == 0 ) {
   "
 amplitude a_i;
 if (qid_2 > qid_1) { printf(\"WARNING: qid2 > qid1\\n\"); }
-in_items.get( i , a_i );
+in_items.get( t , a_i );
 
-const int f_i = tensor_permute( i , size , qid_1, qid_2 );
+const int f_i = tensor_permute( t , size , qid_1, qid_2 );
 
 if (f_i % 4 == 3)
   a_i = - a_i;
 
-out_items.put( i , a_i );
-out_tags.put( i );
+out_items.put( t , a_i );
+out_tags.put( t );
 ")
 
 (defkernel kron ((:consumes tangle_1 tangle_2)
@@ -445,6 +445,7 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
     (format t "Generating MC program graph... ")
     (let ((mc-graph (compile-mc mc-program)))
       (format t "done~%Collecting data for CnC code generation... ")
+      (mcg::show-dot mc-graph)
       (let ((cnc-program (mc-graph-to-cnc-program mc-graph)))
 	(format t "done~%Beginning code generation.~%")
 	(build cnc-program)

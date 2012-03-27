@@ -209,19 +209,19 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 
 (defun mc-graph-to-cnc-program (mc-graph)
   (let ((swap-table (make-hash-table)))
-    ;; first pass: create elements, only used to fix object identities
+    ;; preliminary pass: create elements, only used to fix object identities
     (loop for node in (graph-nodes mc-graph)
 	  do (setf (gethash node swap-table)
-		   (prototype-mc-node (mcg::node-content node))))
-    ;; second pass: process each node in-place, fill in info from AG
+		   (prototype-mc-node (node-content node))))
+    ;; first pass: process each node in-place, fill in info from AG
     (loop for node in (graph-nodes mc-graph)
-	  do (process-first-pass (mcg::node-content node) 
+	  do (process-first-pass (node-content node) 
 				 node
 				 swap-table))
-    ;; third pass: process information from dependencie (controls,
+    ;; second pass: process information from dependencie (controls,
     ;; prescribes)
     (loop for node in (graph-nodes mc-graph)
-	  do (process-second-pass (mcg::node-content node) 
+	  do (process-second-pass (node-content node) 
 				  node
 				  swap-table))
     (loop for node being each hash-key in swap-table 
@@ -343,13 +343,19 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 	    parameter-bindings (process-bindings content
 						 (consuming-tangles node))))))
 
+(defun downstream-steps (node swap-table)
+  (declare (type mcg::node node)
+	   (type hash-table swap-table))
+  (flet ((swap (node) (gethash node swap-table)))
+    (remove-if-not #'cnc-step-collection-p 
+		   (mapcar #'swap (node-downstream-nodes node)))))
+
+
 (defmethod process-second-pass ((content mcg::tangle) node swap-table)
-  (let ((tags (cnc::cnc-item-collection-associated-tags 
+  (let ((tags (cnc-item-collection-associated-tags 
 	       (gethash node swap-table))))
-    (setf (cnc::cnc-tag-collection-prescribes tags) 
-	  (remove-if-not #'cnc::cnc-step-collection-p 
-			 (mapcar #'mcg::node-content
-				 (mcg::node-downstream-nodes node))))))
+    (setf (cnc-tag-collection-prescribes tags) 
+	  (downstream-steps node swap-table))))
 
 #+nil(defmethod process-mc-node ((content mcg::kronecker-operation) 
 			    node
@@ -447,6 +453,8 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
       (format t "done~%Collecting data for CnC code generation... ")
       (mcg::show-dot mc-graph)
       (let ((cnc-program (mc-graph-to-cnc-program mc-graph)))
+	(cnc::show-dot cnc-program)
+;	(inspect cnc-program)
 	(format t "done~%Beginning code generation.~%")
 	(build cnc-program)
 	'ok))))

@@ -22,7 +22,9 @@
 	   cnc-item-collection cnc-tag-collection cnc-step-collection
 	   cnc-item-collection-name cnc-tag-collection-name 
 	   cnc-tag-collection-prescribes
-	   ))
+	   cnc-item-collection-associated-tags
+	   cnc-step-collection-p
+  ))
 
 (in-package :cnc-model)
 
@@ -239,5 +241,39 @@ the given cnc-program"
 
 
 
+;;;; PRINT GRAPH TO GRAPHVIZ ;;;;
 
+(defun show-dot (program)
+  (with-open-file (dotfile
+		   #P"/tmp/graph.dot" 
+		   :direction :output 
+		   :if-does-not-exist :create 
+		   :if-exists :supersede)
+    (format dotfile "digraph {~%" )
+    (loop for step in (cnc-program-steps program)
+	  do (format dotfile "\"~A\" [shape=ellipse];~%" 
+		     (cnc-step-collection-name step)))
+    (loop for item in (cnc-program-items program)
+	  do (format dotfile "\"~A\" [shape=rectangle];~%" 
+		     (cnc-item-collection-name item)))
+    (loop for tag in (cnc-program-tags program)
+	  do (format dotfile "\"~A\" [shape=trapezium];~%" 
+		     (cnc-tag-collection-name tag)))
+    (loop for (tag . step) in (cnc-program-prescriptions program)
+	  do (format dotfile  "\"~A\" -> \"~A\" [style=dotted];~%"
+		     tag step))
+    (loop for (step . item) in (cnc-program-consumes program)
+	  do (format dotfile  "\"~A\" -> \"~A\" [];~%"
+		     item step))
+    (loop for (step . item) in (cnc-program-produces program)
+	  do (format dotfile  "\"~A\" -> \"~A\" [];~%"
+		     step item))
+    (loop for (step . tag) in (cnc-program-controls program)
+	  do (format dotfile  "\"~A\" -> \"~A\" [];~%"
+		     step tag))
+    (format dotfile "}~%" )
+    )
+  (format t "Dumped dot file in /tmp/graph.dot~%")
+					; (sb-ext:run-program "/Applications/Graphviz.app/Contents/MacOS/Graphviz" (list "/tmp/graph.dot"))
+  )
 

@@ -42,7 +42,7 @@
   (:export compile-mc
 	   graph make-graph graph-nodes graph-input-nodes graph-output-nodes
 	   node make-node node-label node-content node-upstream-nodes
-	   node-downstream-nodes
+	   node-downstream-nodes 
 	   input-node-p output-node-p
 	   add-node add-input-node add-output-node))
 
@@ -734,20 +734,6 @@ connections to the program graph."
       (mcg::ag-X-correction (format nil "X ~A" (mcg::ag-correction-qubit content)))
       (mcg::ag-Z-correction (format nil "Z ~A" (mcg::ag-correction-qubit content)))
       (mcg::kronecker-operation (format nil "Kronecker Product"))
-      ;; ;;;; cnc nodes
-      ;; (cnc-tangle (format nil "Tangle [ ~{~S ~}]" 
-      ;; 			  (mcg::tangle-qubits (cnc-tangle-tangle content))))
-      ;; (cnc-entanglement-operation 
-      ;;  (format nil "~A (~A, ~A)"
-      ;; 	       (cnc::kernel-name (cnc-operation-step-kernel content)) 
-      ;; 	       (cnc-entanglement-operation-qubit content)
-      ;; 	       (cnc-entanglement-operation-qubit-2 content)))
-      ;; (cnc-operation
-      ;;  (format nil "~A (~A)"
-      ;; 	       (cnc::kernel-name (cnc-operation-step-kernel content)) 
-      ;; 	       (cnc-operation-qubit content)))
-      ;; (cnc-signal 
-      ;;  "Signal-map")
       (otherwise (node-label node)))))
 
 (defun dot-node-shape (node graph)

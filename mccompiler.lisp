@@ -311,8 +311,8 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
       )))
 
 (defmethod process-first-pass ((content mcg::operation) 
-			    node
-			    swap-table)
+			       node
+			       swap-table)
   "ag-operation invariant: consumes one, produces one"
   (let ((step-collection (gethash node swap-table)))
     (with-accessors ((name cnc::cnc-step-collection-name)
@@ -438,7 +438,9 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 	 :value (mcg::tangle-size (first consuming-tangles)))
 	(cnc::make-actual-parameter 
 	 :name 'qid
-	 :value (mcg::ag-measurement-qubit content))
+	 :value (mcg::qubit-tensor-index 
+		 (mcg::ag-measurement-qubit content)
+		 (first consuming-tangles)))
 	(cnc::make-actual-parameter 
 	 :name 'angle
 	 :value (mcg::ag-measurement-angle content))))

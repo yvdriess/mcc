@@ -464,9 +464,9 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 	     do (assert (= tag-index index))
 	     do (loop for step in (cnc-tag-collection-prescribes tag)
 		      for step-name = (cnc-step-collection-name step)
-		      do (line "tags[~d].prescribes(~A, *this)" 
+		      do (line "tags[~d].prescribes(~A, *this);" 
 			       index
-			       step)))
+			       step-name)))
        (loop for step in (cnc-program-steps program)
 	     for step-name = (cnc-step-collection-name step)
 	     for produces = (cnc-step-collection-produces step)

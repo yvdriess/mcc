@@ -39,10 +39,12 @@ if ( (t & qid) == 0 ) {
 			   (qid_2 int)))
   "
 amplitude a_i;
-if (qid_2 > qid_1) { printf(\"WARNING: qid2 > qid1\\n\"); }
+const int q1 = qid_1 > qid_2 ? qid_1 : qid_2;
+const int q2 = qid_1 > qid_2 ? qid_2 : qid_1;
+
 in_items.get( t , a_i );
 
-const int f_i = tensor_permute( t , size , qid_1, qid_2 );
+const int f_i = tensor_permute( t , size , q1, q2 );
 
 if (f_i % 4 == 3)
   a_i = - a_i;
@@ -323,7 +325,6 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 	    produces (producing node swap-table)
 	    consumes (consuming node swap-table)))))
 
-
 ;;; PROCESS-SECOND-PASS
 
 (defmethod process-second-pass (content node swap-table)
@@ -350,12 +351,20 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
     (remove-if-not #'cnc-step-collection-p 
 		   (mapcar #'swap (node-downstream-nodes node)))))
 
+(defun aux-consumed-p (step tags)
+  (let ((consumes (cnc-step-collection-consumes step)))
+    (and (= (length consumes) 2)
+	 (equal tags (cnc-item-collection-associated-tags (second consumes))))))
+
 
 (defmethod process-second-pass ((content mcg::tangle) node swap-table)
   (let ((tags (cnc-item-collection-associated-tags 
-	       (gethash node swap-table))))
-    (setf (cnc-tag-collection-prescribes tags) 
-	  (downstream-steps node swap-table))))
+	       (gethash node swap-table)))
+	(steps (downstream-steps node swap-table)))
+    (loop for step in steps
+	  unless (aux-consumed-p step tags)
+	    do (setf (cnc-tag-collection-prescribes tags) 
+		    steps))))
 
 #+nil(defmethod process-mc-node ((content mcg::kronecker-operation) 
 			    node
@@ -451,7 +460,7 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
     (format t "Generating MC program graph... ")
     (let ((mc-graph (compile-mc mc-program)))
       (format t "done~%Collecting data for CnC code generation... ")
-      (mcg::show-dot mc-graph)
+;      (mcg::show-dot mc-graph)
       (let ((cnc-program (mc-graph-to-cnc-program mc-graph)))
 	(cnc::show-dot cnc-program)
 ;	(inspect cnc-program)

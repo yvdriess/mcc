@@ -37,7 +37,7 @@ if ( (t & qid) == 0 ) {
 	      (:parameters (size int) 
 			   (qid_1 int) 
 			   (qid_2 int)))
-  "
+"
 amplitude a_i;
 const int q1 = qid_1 > qid_2 ? qid_1 : qid_2;
 const int q2 = qid_1 > qid_2 ? qid_2 : qid_1;
@@ -351,20 +351,32 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
     (remove-if-not #'cnc-step-collection-p 
 		   (mapcar #'swap (node-downstream-nodes node)))))
 
-(defun aux-consumed-p (step tags)
-  (let ((consumes (cnc-step-collection-consumes step)))
-    (and (= (length consumes) 2)
-	 (equal tags (cnc-item-collection-associated-tags (second consumes))))))
-
-
 (defmethod process-second-pass ((content mcg::tangle) node swap-table)
-  (let ((tags (cnc-item-collection-associated-tags 
-	       (gethash node swap-table)))
-	(steps (downstream-steps node swap-table)))
-    (loop for step in steps
-	  unless (aux-consumed-p step tags)
-	    do (setf (cnc-tag-collection-prescribes tags) 
-		    steps))))
+  (let* ((items (gethash node swap-table))
+	 (tags (cnc-item-collection-associated-tags items))
+	 (consuming-node (first (node-downstream-nodes node)))
+	 (steps (first (downstream-steps node swap-table)))
+	 (consumes (cnc-step-collection-consumes steps)))
+    (assert (= 1 (length (node-downstream-nodes node))))
+    (flet ((aux-consumed-p () 
+	     (and (= (length consumes) 2)
+		  (equal tags 
+			 (cnc-item-collection-associated-tags (second
+							       consumes))))))
+      (unless (aux-consumed-p)
+	(setf (cnc-tag-collection-prescribes tags) steps))
+      (setf (cnc::cnc-item-collection-tuner items)
+	    (determine-item-tuner ))))))
+
+(defmethod get-count ((operation mcg::ag-operation) step tangle-node)
+  1)
+(defmethod get-count ((operation mcg::ag-measurement) step tangle-node)
+  2)
+(defmethod get-count ((operation mcg::kronecker-operation) step tangle-node)
+  (let ((steps ()))
+    (mcg::tangle-size sibling-tangle)))
+
+
 
 #+nil(defmethod process-mc-node ((content mcg::kronecker-operation) 
 			    node
@@ -462,9 +474,9 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
     (format t "Generating MC program graph... ")
     (let ((mc-graph (compile-mc mc-program)))
       (format t "done~%Collecting data for CnC code generation... ")
-;      (mcg::show-dot mc-graph)
+      (mcg::show-dot mc-graph)
       (let ((cnc-program (mc-graph-to-cnc-program mc-graph)))
-	(cnc::show-dot cnc-program)
+;	(cnc::show-dot cnc-program)
 ;	(inspect cnc-program)
 	(format t "done~%Beginning code generation.~%")
 	(build cnc-program)

@@ -333,6 +333,14 @@ Syntax:  <identifier> | 0 | 1 | (q <qubit>) | (+ {<signal>}+ )"
 (defun add-node (node graph)
   (pushnew node (graph-nodes graph)))
 
+#+nil(defun node-sibling (node)
+  (let ((children (node-downstream-nodes node)))
+    (assert (= 1 (length children)))
+    (let ((siblings (node-upstream-nodes (first children))))
+      (assert (= 1 (length siblings)))
+      (first siblings))))
+
+
 
 ;; (defgeneric connect (upstream downstream))
 

@@ -87,6 +87,14 @@
 	do (pushnew kernel kernels :test #'equal)
 	finally (return kernels)))
 
+(defun-cached-in-obj cnc-program-item-tuners (program)
+  (loop for item in (cnc-program-items program)
+	with item-tuners
+	do (pushnew (cnc-item-collection-tuner item)
+		    item-tuners 
+		    :test #'equal)
+	finally (return item-tuners)))
+
 ;;; ITEM COLLECTIONS
 (defstruct cnc-item-collection
   name
@@ -99,7 +107,6 @@
   name
   get-count
   (deriving-from "CnC::hashmap_tuner"))
-
 
 ;;; TAG COLLECTIONS
 (defstruct cnc-tag-collection

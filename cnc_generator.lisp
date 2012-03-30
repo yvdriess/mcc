@@ -81,19 +81,20 @@ struct context;
 template<class collection, size_t size>
 class collection_array {
 public:
-  void* raw;
+  collection_array() { /* very unsafe */ }
   collection_array(context& c) {
         char str[16];
-	raw = operator new[]( size*sizeof(collection) );
-	collection *ptr = static_cast<collection*>( raw );
+	collection *ptr = static_cast<collection*>( (void*)raw );
 	for( int i = 0; i < size; ++i ) {
           sprintf(str,\"col_%d\",i);
 	  new( &ptr[i] )collection( c, str );
 	}
   }
   collection& operator[]( size_t i ) const {
-	  return static_cast<collection*>( raw )[i]; 
+    return static_cast<collection*>( (void*)raw )[i]; 
   }
+private:
+  char raw[size*sizeof(collection)];
 };
 
 ")
@@ -316,11 +317,19 @@ public:
       (line "opterr = 0;")
       (line "int debug_level=0;")
       (line "int threads=0;")
+      (line "int timer=0;")
+      (line "int scheduler_stats=0;")
       (line "int c; 
-while ((c = getopt (argc, argv, \"dt:\")) != -1)
+while ((c = getopt (argc, argv, \"dist:\")) != -1)
   switch (c) {
     case 't':
       threads = atoi(optarg);
+      break;
+    case 's':
+      scheduler_stats=1;
+      break;
+    case 'i':
+      timer=1;
       break;
     case 'd':
       debug_level = 1;
@@ -359,17 +368,20 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 	  (line "CnC::debug::trace( ctx.tags[i] );"))
 	(loop for step in (cnc-program-steps program)
 	      do (line "CnC::debug::trace( ctx.~A );"
-		       (cnc-step-collection-name step)))
-	(line "CnC::debug::collect_scheduler_statistics(ctx);")
-	)
+		       (cnc-step-collection-name step))))
       (line "}~%")
+      (line "if( scheduler_stats )")
+      (line "  CnC::debug::collect_scheduler_statistics(ctx);")
 
       ;; insert code that fills the right tag and item collections with elements
       (generate-source-calls program)
+      (line "if( timer )")
+      (line "  CnC::debug::init_timer();")
 
-      (line "CnC::debug::init_timer();")
       (line "ctx.wait();")
-      (line "CnC::debug::finalize_timer(\"-\");")
+
+      (line "if( timer )")
+      (line "  CnC::debug::finalize_timer(\"timer\");")
 
       ;; insert code that retrieves the info
       (generate-sink-calls program)
@@ -431,6 +443,19 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 		      (match-parameter-values parameters
 					      parameter-bindings))))))
 
+(defun generate-item-tuners (program)
+  (line "
+template<int N>
+struct tangle_tuner : public CnC::hashmap_tuner
+{
+    // provide number gets to each item
+    int get_count( const int & tag ) const { return N; }
+};
+
+tangle_tuner<1> singleton_tuner;
+tangle_tuner<2> dual_tuner;
+"))
+
 (defun generate-context-constructor-source (program)
   (line "context::context(): ")
   (indented 
@@ -439,15 +464,9 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
    (lines "~A( *this , \"~:*~A\", ~A)," 
 	  (step-names program)
 	  (mapcar #'(lambda (step) (generate-step-instance step program))
-		  (cnc::cnc-program-steps program))
-					;(mapcar #'generate-tuner-instance (cnc::cnc-program-steps
-					;program))				;
-	  )
-   (line "items(*this),")
+		  (cnc::cnc-program-steps program)))
+;   (line "items(*this),")
    (line "tags(*this)")
-   ;; (lines "~A( *this , \"~:*~A\" )," (item-names program))
-   ;; (comma-seperated
-   ;; 	(lines "~A( *this , \"~:*~A\" )" (tag-names program)))
    (indented
     (line "{")
     (indented
@@ -458,10 +477,16 @@ while ((c = getopt (argc, argv, \"dt:\")) != -1)
 	   )
        ;; TODO would be interesting to see difference between unrolled
        ;; and for loop version
-       (loop for tag in (cnc-program-tags program)
-	     for tag-index = (get-tag-index tag program)
+       (loop for item in (cnc-program-items program)
 	     for index from 0
-	     do (assert (= tag-index index))
+	     when (consumed-n-times-p 1 item program)
+	       do (line 
+"new(&items[~d])tangle_items_type(*this, \"~A\"~[, singleton_tuner~;, dual_tuner~]);"
+			index
+			(cnc-item-collection-name item)
+			(times-consumed item program)))
+       (loop for tag in (cnc-program-tags program)
+	     for index from 0
 	     do (loop for step in (cnc-tag-collection-prescribes tag)
 		      for step-name = (cnc-step-collection-name step)
 		      do (line "tags[~d].prescribes(~A, *this);" 

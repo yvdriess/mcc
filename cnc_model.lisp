@@ -21,7 +21,7 @@
 	   actual-parameter-value actual-parameter-name
 	   cnc-item-collection cnc-tag-collection cnc-step-collection
 	   cnc-item-collection-name cnc-tag-collection-name 
-	   cnc-tag-collection-prescribes
+	   cnc-tag-collection-prescribes cnc-item-collection-size
 	   cnc-item-collection-associated-tags
 	   cnc-step-collection-p
   ))

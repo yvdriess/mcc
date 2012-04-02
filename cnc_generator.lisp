@@ -415,7 +415,7 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
   (position tag (cnc-program-tags program)))
 
 (defun generate-step-instance (step program)
-  "Genererates a step collection instantiation, calling its constructor"
+  "Genererates step collection instantiation code, calling its ctor"
   (let ((kernel (cnc-step-collection-kernel step)))
     (assert (verify-dependencies-with-kernel-p step kernel))
     ;; using the order with which the step kernel ctor was defined:
@@ -444,6 +444,7 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
 					      parameter-bindings))))))
 
 (defun generate-item-tuners (program)
+  (declare (ignore program))
   (line "
 template<int N>
 struct tangle_tuner : public CnC::hashmap_tuner
@@ -455,6 +456,14 @@ struct tangle_tuner : public CnC::hashmap_tuner
 tangle_tuner<1> singleton_tuner;
 tangle_tuner<2> dual_tuner;
 "))
+
+(defun times-consumed (item)
+  (let ((tuner (cnc::cnc-item-collection-tuner item)))
+    ;; no tuner means no consuming steps
+    ;; in turn this means only consumed once, by the sink function
+    (if tuner
+	(cnc::cnc-item-tuner-get-count tuner)
+	1)))
 
 (defun generate-context-constructor-source (program)
   (line "context::context(): ")
@@ -479,12 +488,12 @@ tangle_tuner<2> dual_tuner;
        ;; and for loop version
        (loop for item in (cnc-program-items program)
 	     for index from 0
-	     when (consumed-n-times-p 1 item program)
+	     if (<= (times-consumed item) 2)
 	       do (line 
 "new(&items[~d])tangle_items_type(*this, \"~A\"~[, singleton_tuner~;, dual_tuner~]);"
 			index
 			(cnc-item-collection-name item)
-			(times-consumed item program)))
+			(1- (times-consumed item))))
        (loop for tag in (cnc-program-tags program)
 	     for index from 0
 	     do (loop for step in (cnc-tag-collection-prescribes tag)
@@ -588,6 +597,6 @@ tangle_tuner<2> dual_tuner;
     (format t "done~%Generating source file...")
     (let ((*header-name* (concatenate 'string target-filename ".h")))
      (write-to-file source (generate-source program)))
-    (format t "done~%Written in ~A to ~A and ~A.~%" target-directory header source)))
+    (format t "done~%Written to ~A and ~A in ~A.~%"  header source (directory target-directory))))
 
 

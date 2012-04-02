@@ -307,6 +307,7 @@ private:
   (line "#include <math.h>")
   (line "#include \"~A\"~%" *header-name*)
   (generate-main-source program)
+  (generate-item-tuners program)
   (generate-context-constructor-source program)
   (generate-step-source program))
 
@@ -493,7 +494,11 @@ tangle_tuner<2> dual_tuner;
 "new(&items[~d])tangle_items_type(*this, \"~A\"~[, singleton_tuner~;, dual_tuner~]);"
 			index
 			(cnc-item-collection-name item)
-			(1- (times-consumed item))))
+			(1- (times-consumed item)))
+	     else 
+	       do (line "new(&items[~d])tangle_items_type(*this, \"~A\");"
+			index
+			(cnc-item-collection-name item)))
        (loop for tag in (cnc-program-tags program)
 	     for index from 0
 	     do (loop for step in (cnc-tag-collection-prescribes tag)

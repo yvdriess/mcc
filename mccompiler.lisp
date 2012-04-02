@@ -116,10 +116,12 @@ const int n = size / qid;
 bool signal=true;
 
 in_tangle.get( i , a_i );
-
+/* 
 const int target_index = 
   signal ? permute( permute(i, n, m)^1, m, n )
-         : i;
+         : i; 
+*/
+const int target_index = i ^ qid;
 
 out_tangle.put( target_index , a_i );
 out_tags.put( target_index );

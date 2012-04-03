@@ -197,6 +197,29 @@ private:
 	    (lines "~A(_~:*~A)" parameter-names))
 	  (line "{};"))))))
 
+(defun generate-item-tuners (program)
+  (declare (ignore program))
+  (line "
+struct tangle_tuner : public CnC::hashmap_tuner
+{
+    const int count;
+    tangle_tuner(int count_): count(count_) {}
+    // provide number gets to each item
+    int get_count( const int & tag ) const { return count; }
+};
+")
+  (line "tangle_tuner tuner_get_one( 1 );")
+  (line "tangle_tuner tuner_get_two( 2 );")
+  ;; assuming everything is a hashmap tuner, at the moment
+  #+nil(loop for tuner in (cnc-program-items program)
+	with getcounts
+	when tuner
+	  do (pushnew (cnc::cnc-item-tuner-get-count tuner)
+		      getcounts)
+	finally 
+	   (loop for N in getcounts
+		 do (line "tangle_tuner<~d> item_tune_getcount_~d;"))))
+
 #+nil(defun generate-tuners (program)
   ;; step tuners, actuals will come from cnc-item-collection's actual parameters
   (loop for step-tuner in (mapcar #'cnc::kernel-tuner 
@@ -441,19 +464,6 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
 		      (match-parameter-values parameters
 					      parameter-bindings))))))
 
-(defun generate-item-tuners (program)
-  (declare (ignore program))
-  (line "
-template<int N>
-struct tangle_tuner : public CnC::hashmap_tuner
-{
-    // provide number gets to each item
-    int get_count( const int & tag ) const { return N; }
-};
-
-tangle_tuner<1> singleton_tuner;
-tangle_tuner<2> dual_tuner;
-"))
 
 (defun times-consumed (item)
   (let ((tuner (cnc::cnc-item-collection-tuner item)))
@@ -462,6 +472,8 @@ tangle_tuner<2> dual_tuner;
     (if tuner
 	(cnc::cnc-item-tuner-get-count tuner)
 	1)))
+
+
 
 (defun generate-context-constructor-source (program)
   (line "context::context(): ")
@@ -479,21 +491,21 @@ tangle_tuner<2> dual_tuner;
     (indented
      (let (;(prescriptions (cnc-program-prescriptions program))
 	   ;(consumes (cnc-program-consumes program))
-	   ;(produces (cnc-program-produces program))
+	   ;(produces (cnc-program-produces program)) (format
 	   ;(controls (cnc-program-controls program))
 	   )
        ;; TODO would be interesting to see difference between unrolled
        ;; and for loop version
        (loop for item in (cnc-program-items program)
 	     for index from 0
-	     if (<= (times-consumed item) 2)
+	     when (times-consumed item)
 	       do (line 
-"new(&items[~d])tangle_items_type(*this, \"~A\"~[, singleton_tuner~;, dual_tuner~]);"
+		   "new(&items[~d])tangle_items_type(*this, 
+  \"~A\"~[, tuner_get_one~;, tuner_get_two~:;, tangle_tuner(~:*~d)~]);"
 			index
 			(cnc-item-collection-name item)
 			(1- (times-consumed item)))
-	     else 
-	       do (line "new(&items[~d])tangle_items_type(*this, \"~A\");"
+		  #+nil(line "new(&items[~d])tangle_items_type(*this, \"~A\");"
 			index
 			(cnc-item-collection-name item)))
        (loop for tag in (cnc-program-tags program)

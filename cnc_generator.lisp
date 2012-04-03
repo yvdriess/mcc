@@ -318,7 +318,6 @@ private:
       (line "opterr = 0;")
       (line "int debug_level=0;")
       (line "int threads=0;")
-      (line "int timer=0;")
       (line "int scheduler_stats=0;")
       (line "int c; 
 while ((c = getopt (argc, argv, \"dist:\")) != -1)
@@ -328,9 +327,6 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
       break;
     case 's':
       scheduler_stats=1;
-      break;
-    case 'i':
-      timer=1;
       break;
     case 'd':
       debug_level = 1;
@@ -374,15 +370,16 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
       (line "if( scheduler_stats )")
       (line "  CnC::debug::collect_scheduler_statistics(ctx);")
 
+      ;; start timer
+      (line "const tbb::tick_count start_counter( tbb::tick_count::now() );")
+
       ;; insert code that fills the right tag and item collections with elements
       (generate-source-calls program)
-      (line "if( timer )")
-      (line "  CnC::debug::init_timer();")
-
+     
       (line "ctx.wait();")
 
-      (line "if( timer )")
-      (line "  CnC::debug::finalize_timer(\"timer\");")
+      (line "const tbb::tick_count::interval_t timer( tbb::tick_count::now() - start_counter );")
+      (line "fprintf(stderr,\"%f\",timer.seconds());")
 
       ;; insert code that retrieves the info
       (generate-sink-calls program)

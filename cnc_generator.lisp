@@ -220,7 +220,7 @@ struct tangle_tuner : public CnC::hashmap_tuner
 	   (loop for N in getcounts
 		 do (line "tangle_tuner<~d> item_tune_getcount_~d;"))))
 
-#+nil(defun generate-tuners (program)
+(defun generate-tuners (program)
   ;; step tuners, actuals will come from cnc-item-collection's actual parameters
   (loop for step-tuner in (mapcar #'cnc::kernel-tuner 
 				  (distinct-kernels program))
@@ -231,15 +231,13 @@ struct tangle_tuner : public CnC::hashmap_tuner
 			    (deriving-from cnc::cnc-step-tuner-deriving-from)) step-tuner
 	     (line "struct ~A : public ~A {" name deriving-from)
 	     (indented 
-	      (generate-ctor-and-members name 
-					 consumes
-					 produces
+	      (generate-ctor-and-members name
 					 parameters)
 	      (line "template< class dependency_consumer >")
 	      (line "void depends( const int& t, context& c, dependency_consumer& dC ) const {")
 	      (indented (line body))
 	      (line "}"))
-	     (line "}")
+	     (line "};")
 	   )))
 
 
@@ -311,7 +309,7 @@ struct tangle_tuner : public CnC::hashmap_tuner
   ;; preamble
   (line #.*MIT-license*)
   (line #.*header-preamble*)
-  ;(generate-tuners program)
+  (generate-tuners program)
   (generate-step-headers program)
   (newline)
   ;; declare/define pervasive functions such as permute

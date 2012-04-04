@@ -65,6 +65,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <new>
+#include <memory>
 
 #include <cnc/cnc.h>
 #include <cnc/debug.h>
@@ -197,8 +198,10 @@ private:
 	    (lines "~A(_~:*~A)" parameter-names))
 	  (line "{};"))))))
 
+(defun getcount-tuner-name (getcount)
+  (format nil "tuner_get_~d" getcount))
+
 (defun generate-item-tuners (program)
-  (declare (ignore program))
   (line "
 struct tangle_tuner : public CnC::hashmap_tuner
 {
@@ -208,17 +211,18 @@ struct tangle_tuner : public CnC::hashmap_tuner
     int get_count( const int & tag ) const { return count; }
 };
 ")
-  (line "tangle_tuner tuner_get_one( 1 );")
-  (line "tangle_tuner tuner_get_two( 2 );")
   ;; assuming everything is a hashmap tuner, at the moment
-  #+nil(loop for tuner in (cnc-program-items program)
+  (loop for tuner in (mapcar #'cnc-item-collection-tuner
+			     (cnc-program-items program))
 	with getcounts
 	when tuner
 	  do (pushnew (cnc::cnc-item-tuner-get-count tuner)
 		      getcounts)
 	finally 
 	   (loop for N in getcounts
-		 do (line "tangle_tuner<~d> item_tune_getcount_~d;"))))
+		 do (line "tangle_tuner ~A( ~d );"
+			  (getcount-tuner-name N)
+			  N))))
 
 (defun generate-tuners (program)
   ;; step tuners, actuals will come from cnc-item-collection's actual parameters
@@ -498,11 +502,10 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
 	     for index from 0
 	     when (times-consumed item)
 	       do (line 
-		   "new(&items[~d])tangle_items_type(*this, 
-  \"~A\"~[, tuner_get_one~;, tuner_get_two~:;, tangle_tuner(~:*~d)~]);"
+		   "new(&items[~d])tangle_items_type(*this, \"~A\", ~A);"
 			index
 			(cnc-item-collection-name item)
-			(1- (times-consumed item)))
+			(getcount-tuner-name (times-consumed item)))
 		  #+nil(line "new(&items[~d])tangle_items_type(*this, \"~A\");"
 			index
 			(cnc-item-collection-name item)))

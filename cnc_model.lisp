@@ -23,7 +23,7 @@
 	   cnc-item-collection-name cnc-tag-collection-name 
 	   cnc-tag-collection-prescribes cnc-item-collection-size
 	   cnc-item-collection-associated-tags
-	   cnc-step-collection-p
+	   cnc-step-collection-p cnc-item-collection-tuner
   ))
 
 (in-package :cnc-model)

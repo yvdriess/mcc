@@ -5,14 +5,18 @@ TIME=/usr/bin/time
 bench_log=/tmp/bench.tmp
 csv=/tmp/csv1.tmp
 csv_tmp=/tmp/csv2.tmp
+rm -f $bench_log $csv $csv_tmp
 touch $csv
 
-for threads in `seq 1 16`; do
+for threads in `seq 1 8`; do
+	echo "T-$threads " > $bench_log
   for iterations in `seq 1 20`; do
-    $TIME -f "%e" ./mccompiled 0 $threads > /dev/null 2>> $bench_log
+	  echo "$threads threads, iteration $iterations";
+    ./mccompiled -t $threads > /dev/null 2>> $bench_log;
+    echo " " >> $bench_log;
   done
   # add column
-  paste -d ';' $csv $bench_log > $csv_tmp
+  paste -d ',' $csv $bench_log > $csv_tmp
   # swap vars
   mv -f $csv_tmp $csv
   # cleanup

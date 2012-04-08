@@ -11,7 +11,7 @@
 	   cnc-program-produces cnc-program-controls
 	   match-parameter-values kernel-p kernel kernel-name
 	   kernel-consumes kernel-parameters kernel-produces
-	   kernel-body kernel-tuners kernel-controls formal-parameter
+	   kernel-body kernel-tuner kernel-controls formal-parameter
 	   formal-parameter-name formal-parameter-type
 	   make-formal-parameter cnc-step-collection-produces
 	   cnc-step-collection-consumes cnc-step-collection-controls
@@ -87,7 +87,7 @@
 	do (pushnew kernel kernels :test #'equal)
 	finally (return kernels)))
 
-(defun-cached-in-obj cnc-program-item-tuners (program)
+(defun cnc-program-item-tuners (program)
   (loop for item in (cnc-program-items program)
 	with item-tuners
 	do (pushnew (cnc-item-collection-tuner item)
@@ -128,6 +128,7 @@
   consumes
   controls
   parameter-bindings
+  tuner-instance-name
 )
 
 (defstruct cnc-step-tuner
@@ -162,9 +163,7 @@ Example:
  		  (:produces tangle_out)
  		  (:controls tag_out)
 		  (:parameters (size_2 int))
-		  (:depends ((tangle_1 tangle_items)
-		 	     (tangle_2 tangle_items)
-			     (size_2 int))
+		  (:depends (tangle_1 size_2)
 			   \"...\"))
                  \"...\")
 Make sure the formal parameters in the kernel
@@ -174,9 +173,11 @@ Make sure the formal parameters in the kernel
   (with-gensyms (g-kernel)
     (labels
 	((build-parameter-list (args)
-	   `(list ,@(loop for (name type) in args
-			  collect `(make-formal-parameter :name ',name 
-							  :type ',type))))
+	   `(list 
+	     ,@(loop for (name type) in args
+		     collect `(make-formal-parameter 
+			       :name ',name 
+			       :type ,(format nil "const ~(~A~)" type)))))
 	 (handle-property-clause (property args)
 	   (case property
 	     (:consumes `(setf (kernel-consumes ,g-kernel) ',args))
@@ -188,8 +189,9 @@ Make sure the formal parameters in the kernel
 	     (:depends 
 	      `(setf (kernel-tuner ,g-kernel)
 		     (make-cnc-step-tuner 
+		      :name (format nil "~A_tuner" ',name)
 		      :depends-body ,(second args)
-		      :parameters ,(build-parameter-list (first args))))))))
+		      :parameters ',(first args)))))))
       `(let ((,g-kernel (make-kernel :name ',name
 				     :body ,kernel-body)))
 	 ,@(loop for (property . args) in clauses

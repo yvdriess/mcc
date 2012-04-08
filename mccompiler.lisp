@@ -23,13 +23,6 @@ for( int t(0) ; t < size_2 ; ++t ) {
   dC.depends( tangle_2 , t );
 }
 ")
-(defvar *M-depends-body*
-   "
-if ( (t & qid) == 0 ) {
-  dC.depends( in_tangle , t );
-  dC.depends( in_tangle , t + qid);
-}"
-   )
 
 (defkernel E ((:consumes in_items) 
 	      (:produces out_items) 
@@ -57,9 +50,7 @@ out_tags.put( t );
 		 (:produces tangle_out)
 		 (:controls tag_out)
 		 (:parameters (size_2 int))
-		 (:depends ((tangle_1 tangle_items_type)
-			    (tangle_2 tangle_items_type)
-			    (size_2 int))
+		 (:depends (tangle_2 size_2)
 			   *kron-depends-body*))
   "
 amplitude amp_1;
@@ -76,14 +67,20 @@ for(int i(0);i<size_2;++i) {
 }
 ")
 
+(defvar *M-depends-body*
+   "
+if ( (t & qid) == 0 ) {
+  //dC.depends( in_tangle , t );
+  dC.depends( in_tangle , t + qid);
+}")
+
 (defkernel M ((:consumes in_tangle) 
 	      (:produces out_tangle) 
 	      (:controls out_tags)
 	      (:parameters (size int) 
 			   (qid int)
 			   (angle double))
-	      (:depends ((in_tangle tangle_items_type)
-			 (qid int))
+	      (:depends (in_tangle qid)
 			*M-depends-body*))
   "
 const unsigned int i = t;
@@ -434,7 +431,7 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 	 :name 'size
 	 :value (mcg::tangle-size (first consuming-tangles)))
 	(cnc::make-actual-parameter 
-	 :name 'qubit
+	 :name 'qid
 	 :value (mcg::qubit-tensor-index (mcg::ag-correction-qubit content) 
 					 (first consuming-tangles)))))
 

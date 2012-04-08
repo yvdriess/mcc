@@ -135,6 +135,13 @@ private:
 	       (make-string (* 2 *indentation*) :initial-element #\ )
 	       string))
 
+(defmacro line (format-string &rest args)
+  `(progn
+     (format *line-stream* (insert-indent ,format-string) 
+	     ,@args)
+     (terpri *line-stream*)
+     *line-stream*))
+
 (defun body-block (string)
   (let ((line-end (position #\Newline string)))
     (unless (zerop (length string))
@@ -142,12 +149,6 @@ private:
       (when line-end
 	  (body-block (subseq string (1+ line-end)))))))
 
-(defmacro line (format-string &rest args)
-  `(progn
-     (format *line-stream* (insert-indent ,format-string) 
-	     ,@args)
-     (terpri *line-stream*)
-     *line-stream*))
 
 (defun no-more-args-p (arg-lists)
   "Returns T if any of the supplied arg-lists contained an empty argument list, nil (nil))"

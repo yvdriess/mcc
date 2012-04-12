@@ -74,16 +74,7 @@
 
 typedef std::complex<double> amplitude;
 
-struct token { 
-  const amplitude amp1;
-  const amplitude amp2;
-  const int tag1;
-  const int tag2;
-};
-
-
-
-typedef CnC::item_collection<int, amplitude> tangle_items_type;
+typedef CnC::item_collection<int, amplitude, CnC::vector_tuner> tangle_items_type;
 typedef CnC::tag_collection<int> tangle_tags_type;
 
 inline std::ostream & cnc_format( std::ostream& os, const amplitude& amp )
@@ -101,8 +92,8 @@ public:
   collection_array(context& c) {
         char str[16];
 	collection *ptr = static_cast<collection*>( (void*)raw );
-	for( size_t i = 0; i < size; ++i ) {
-          sprintf(str,\"col_%d\",i);
+	for( unsigned int i = 0; i < size; ++i ) {
+          sprintf(str,\"col_%ud\",i);
 	  new( &ptr[i] )collection( c, str );
 	}
   }
@@ -223,17 +214,26 @@ private:
   (format nil "tuner_get_~d" getcount))
 
 (defun generate-item-tuners (program)
-  (line "
-struct tangle_tuner : public CnC::hashmap_tuner
+  #+nil(line "
+struct tangle : public CnC::hashmap_tuner
 {
-    const int count;
-    tangle_tuner(int count_): count(count_) {}
+    const int get_count;
+    tangle(int count_): get_count(count_) {}
     // provide number gets to each item
-    int get_count( const int & tag ) const { return count; }
+    int get_count( const int & tag ) const { return get_count; }
+};
+")
+  #+nil(line "
+struct tangle : public CnC::hashmap_tuner
+{
+    const int get_count;
+    tangle(int count_): get_count(count_) {}
+    // provide number gets to each item
+    int get_count( const int & tag ) const { return get_count; }
 };
 ")
   ;; assuming everything is a hashmap tuner, at the moment
-  (loop for tuner in (mapcar #'cnc-item-collection-tuner
+  #+nil(loop for tuner in (mapcar #'cnc-item-collection-tuner
 			     (cnc-program-items program))
 	with getcounts
 	when tuner
@@ -241,7 +241,7 @@ struct tangle_tuner : public CnC::hashmap_tuner
 		      getcounts)
 	finally 
 	   (loop for N in getcounts
-		 do (line "tangle_tuner ~A( ~d );"
+		 do (line "tangle ~A( ~d );"
 			  (getcount-tuner-name N)
 			  N))))
 
@@ -618,12 +618,15 @@ value in cdr."
        ;; and for loop version
        (loop for item in (cnc-program-items program)
 	     for index from 0
-	     when (times-consumed item)
-	       do (line 
-		   "new(&items[~d])tangle_items_type(*this, \"~A\", ~A);"
-			index
-			(cnc-item-collection-name item)
-			(getcount-tuner-name (times-consumed item)))
+	     do (line 
+		 "new(&items[~d])tangle_items_type(*this, \"~A\");"
+		 index
+		 (cnc-item-collection-name item)
+		#+nil(getcount-tuner-name (times-consumed
+					   item)))
+	     do (line "items[~d].set_max(~d);"
+		      index
+		      (cnc-item-collection-size item))
 		  #+nil(line "new(&items[~d])tangle_items_type(*this, \"~A\");"
 			index
 			(cnc-item-collection-name item)))

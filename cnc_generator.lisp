@@ -101,7 +101,7 @@ public:
   collection_array(context& c) {
         char str[16];
 	collection *ptr = static_cast<collection*>( (void*)raw );
-	for( int i = 0; i < size; ++i ) {
+	for( size_t i = 0; i < size; ++i ) {
           sprintf(str,\"col_%d\",i);
 	  new( &ptr[i] )collection( c, str );
 	}

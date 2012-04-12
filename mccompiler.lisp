@@ -108,9 +108,11 @@ if ( (i & qid) == 0 ) {
   "
 amplitude a_i;
 const int i = t;
+/*
 const int m = qid;
 const int n = size / qid;
 bool signal=true;
+*/
 
 in_tangle.get( i , a_i );
 /* 

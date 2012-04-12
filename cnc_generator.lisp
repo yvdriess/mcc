@@ -604,7 +604,7 @@ value in cdr."
 		  (cnc::cnc-program-steps program))
 	  (mapcar #'cnc::cnc-step-collection-tuner-instance-name
 		  (cnc::cnc-program-steps program)))
-;   (line "items(*this),")
+   (line "items(*this),")
    (line "tags(*this)")
    (indented
     (line "{")
@@ -618,12 +618,12 @@ value in cdr."
        ;; and for loop version
        (loop for item in (cnc-program-items program)
 	     for index from 0
-	     do (line 
-		 "new(&items[~d])tangle_items_type(*this, \"~A\");"
-		 index
-		 (cnc-item-collection-name item)
-		#+nil(getcount-tuner-name (times-consumed
-					   item)))
+	     ;; do (line 
+	     ;; 	 "new(&items[~d])tangle_items_type(*this, \"~A\");"
+	     ;; 	 index
+	     ;; 	 (cnc-item-collection-name item)
+	     ;; 	#+nil(getcount-tuner-name (times-consumed
+	     ;; 				   item)))
 	     do (line "items[~d].set_max(~d);"
 		      index
 		      (cnc-item-collection-size item))

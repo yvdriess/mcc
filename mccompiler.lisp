@@ -201,6 +201,49 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 }
 ")
 
+#|
+
+// E e_qid1 e_qid2, M m_qid, X x_qid
+struct operation_j2r: public CnC::step_tuner<> {
+  int execute( const int& t, constext& c ) const {
+    
+  amplitude amp1, amp2;
+    
+  in_tangle.get(t,amp1);
+  if( m_qid != 1 ) //measuring the fresh qubit?
+    in_tangle.get( t + (m_qid >> 1), amp2);
+  else
+    amp2 = 0.5;
+      
+
+  const int t1 = t << 1;
+  const int t2 = (t << 1) ^ 1;
+  const int t3 = (t + (m_qid >> 1)) << 1;
+  const int t4 = t3 ^ 1;
+
+  amplitude a1 = amp1 * 0.5;
+  amplitude a2 = amp1 * 0.5;
+  amp1itude a3 = amp2 * 0.5;
+  amp1itude a4 = amp2 * 0.5;
+
+  const int e_q1 = e_qid1 > e_qid2 ? e_qid1 : e_qid2;
+  const int e_q2 = e_qid1 > e_qid2 ? e_qid2 : e_qid1;
+  
+  const int f_i  = tensor_permute( t1 , size , q1, q2 );
+  const int f_i2 = tensor_permute( t2 , size , q1, q2 );
+  
+  if (f_i % 4 == 3)
+    a1 = - a1;
+  if (f_i2 % 4 == 3)
+    a2 = - a2;
+  
+  return CnC::CNC_Success;
+  }
+
+};
+
+|#
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; 1. MC GRAPH TO CNC PROGRAM  ;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -225,6 +268,9 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 	  do (process-second-pass (node-content node) 
 				  node
 				  swap-table))
+    ;; third pass: optimize/coarsen
+    
+    ;; collect all information and construct cnc-program object
     (loop for node being each hash-key in swap-table 
 	    using (hash-value collection)
 	  when (cnc::cnc-item-collection-p collection)

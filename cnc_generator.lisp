@@ -74,6 +74,15 @@
 
 typedef std::complex<double> amplitude;
 
+struct token { 
+  const amplitude amp1;
+  const amplitude amp2;
+  const int tag1;
+  const int tag2;
+};
+
+
+
 typedef CnC::item_collection<int, amplitude> tangle_items_type;
 typedef CnC::tag_collection<int> tangle_tags_type;
 
@@ -308,13 +317,13 @@ struct tangle_tuner : public CnC::hashmap_tuner
       (line "int execute( const int& t, context& c ) const;")
       (line "")
       (line "~A& operator=( const ~A& obj ) {"
-	    (operation-type kernel)
-	    (operation-type kernel))
+      	    (operation-type kernel)
+      	    (operation-type kernel))
       (indented 
-	(line "return (*this = ~A(obj));" (operation-type kernel)))
+      	(line "return (*this = ~A(obj));" (operation-type kernel)))
       (line "}")
       (line "")
-      (when (kernel-tuner kernel)
+      (When (kernel-tuner kernel)
 	;; can possibly also make this an item tuner and add get_count
 	;; or max
 	(line "template< class dependency_consumer >")

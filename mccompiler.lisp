@@ -61,7 +61,7 @@ for(int i(0);i<size_2;++i) {
   tangle_2.get(i,amps[i]);
 }
 for(int i(0);i<size_2;++i) {
-  const unsigned int new_index( t * size_2 + i );
+  const int new_index( t * size_2 + i );
   tangle_out.put( new_index, amp_1 * amps[i] );
   tag_out.put(new_index);
 }
@@ -83,17 +83,17 @@ if ( (t & qid) == 0 ) {
 	      (:depends (in_tangle qid)
 			*M-depends-body*))
   "
-const unsigned int i = t;
+const int i = t;
 
 if ( (i & qid) == 0 ) {
   amplitude a_i1;
   amplitude a_i2;
   const amplitude phi_1 = std::exp(amplitude(0,-angle));
-  const unsigned int i2 = i + qid;
+  const int i2 = i + qid;
   in_tangle.get( i  , a_i1 );
   in_tangle.get( i2 , a_i2 );
   const amplitude new_amp = a_i1 - a_i2 * phi_1;
-  const unsigned int new_index = compact_bit_index(i,qid);
+  const int new_index = compact_bit_index(i,qid);
   out_tangle.put( new_index , new_amp );
   out_tags.put( new_index );
 }
@@ -173,13 +173,13 @@ for( int i(0) ; i < size ; ++i ) {
 
 (defvar *source-tensor-permute-function*
 "
-static unsigned int tensor_permute(const unsigned int i,const unsigned int siz, 
-                                   const unsigned int i1, const unsigned int i2) {
+static int tensor_permute(const int i,const int siz, 
+                                   const int i1, const int i2) {
   // MAKE SURE i1 >= i2 !!!
   // const int o = i1;
-  const unsigned int m = 2;
-  const unsigned int n = (i1 / i2);
-  const unsigned int p = i2;
+  const int m = 2;
+  const int n = (i1 / i2);
+  const int p = i2;
    return 
     i 
     + p * ( n - 1 ) * floor( i / p      )
@@ -189,14 +189,14 @@ static unsigned int tensor_permute(const unsigned int i,const unsigned int siz,
   
  (defvar *source-permute-function*
 "
-static unsigned int permute(const unsigned int i,const unsigned int m, 
-                            const unsigned int n) {
+static int permute(const int i,const int m, 
+                   const int n) {
   return n * ( i % m ) + floor( i / m ); 
 }")
   
  (defvar *source-compact-index-function*
 "
-static unsigned int compact_bit_index(const unsigned int i, const unsigned int bit) {
+static int compact_bit_index(const int i, const int bit) {
   return ((i - i % (2 * bit)) >> 1) + i % bit;
 }
 ")

@@ -316,13 +316,6 @@ struct tangle_tuner : public CnC::hashmap_tuner
 				 (marshal-parameters kernel))
       (line "int execute( const int& t, context& c ) const;")
       (line "")
-      (line "~A& operator=( const ~A& obj ) {"
-      	    (operation-type kernel)
-      	    (operation-type kernel))
-      (indented 
-      	(line "return (*this = ~A(obj));" (operation-type kernel)))
-      (line "}")
-      (line "")
       (When (kernel-tuner kernel)
 	;; can possibly also make this an item tuner and add get_count
 	;; or max
@@ -360,7 +353,7 @@ struct tangle_tuner : public CnC::hashmap_tuner
   (indented    
     (loop for kernel in (distinct-kernels program)
 	  for step-type = (step-type kernel)
-	  do (line "std::vector< ~A > ~A;" 
+	  do (line "std::vector< ~A* > ~A;" 
 		   (operation-type kernel)
 		   (operation-store-name kernel))
 	  do (line "std::vector< ~A* > ~A;"
@@ -639,10 +632,10 @@ value in cdr."
 	     for produces = (cnc-step-collection-produces step)
 	     for consumes = (cnc-step-collection-consumes step)
 	     for controls = (cnc-step-collection-controls step)
-	     do (line "~A.push_back( ~A );"
+	     do (line "~A.push_back( new ~A );"
 		      (operation-store-name kernel)
 		      (operation-instance step program)) 
-	     do (line "~A.push_back( new ~A(*this, \"~A\", ~A.back(), ~:*~A.back()) );" 
+	     do (line "~A.push_back( new ~A(*this, \"~A\", *~A.back(), *~:*~A.back()) );" 
 		      (step-store-name kernel)
 		      (step-type kernel)
 		      (cnc-step-collection-name step)

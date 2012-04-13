@@ -475,7 +475,7 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
       (line "ctx.wait();")
 
       (line "const tbb::tick_count::interval_t timer( tbb::tick_count::now() - start_counter );")
-      (line "fprintf(stderr,\"%f\",timer.seconds());")
+      (line "fprintf(stderr,\" %f \",timer.seconds());")
 
       ;; insert code that retrieves the info
       (generate-sink-calls program)

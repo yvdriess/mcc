@@ -544,3 +544,8 @@ struct operation_j2r: public CnC::step_tuner<> {
 
 #+nil(let ((mc-program '((E 1 2) (E 3 4) (E 2 4) (M 1) (X 2 (q 1)))))
   (compile-to-cnc mc-program))
+
+(let ((mc-program '((X 1) (E 3 4) (E 2 3) (E 1 3) (M 2) (M 3) (Z 1 (q
+								    2))
+		    (Z 4 (q 2)) (X 4 (q 3)) (X 1))))
+  (compile-to-cnc mc-program))

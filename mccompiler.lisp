@@ -32,14 +32,15 @@ for( int t(0) ; t < size_2 ; ++t ) {
 			   (qid_2 int)))
 "
 amplitude a_i;
-const int q1 = qid_1 > qid_2 ? qid_1 : qid_2;
-const int q2 = qid_1 > qid_2 ? qid_2 : qid_1;
+//const int q1 = qid_1 > qid_2 ? qid_1 : qid_2;
+//const int q2 = qid_1 > qid_2 ? qid_2 : qid_1;
 
 in_items.get( t , a_i );
 
-const int f_i = tensor_permute( t , size , q1, q2 );
+//const int f_i = tensor_permute( t , size , q1, q2 );
+//if (f_i % 4 == 3)
 
-if (f_i % 4 == 3)
+if( t & qid_1 && t & qid_2 ) 
   a_i = - a_i;
 
 out_items.put( t , a_i );
@@ -209,19 +210,20 @@ static int compact_bit_index(const int i, const int bit) {
 struct operation_j2r: public CnC::step_tuner<> {
   int execute( const int& t, constext& c ) const {
     
-  amplitude amp1, amp2;
-    
-  in_tangle.get(t,amp1);
-  if( m_qid != 1 ) //measuring the fresh qubit?
-    in_tangle.get( t + (m_qid >> 1), amp2);
-  else
-    amp2 = 0.5;
-      
-
   const int t1 = t << 1;
   const int t2 = (t << 1) ^ 1;
-  const int t3 = (t + (m_qid >> 1)) << 1;
-  const int t4 = t3 ^ 1;
+
+  amplitude amp1, amp2;
+    
+  if( t1 & m_qid )
+    return CnC::CNC_Success;
+
+  in_tangle.get(t,amp1);
+  if( m_qid == 1 ) {
+    amp2 = 0.5;
+  }
+  else {
+    in_tangle.get(t ^ (m_qid >> 1),amp2);
 
   amplitude a1 = amp1 * 0.5;
   amplitude a2 = amp1 * 0.5;

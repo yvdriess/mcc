@@ -458,7 +458,27 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
 	      (length (cnc-program-tags program)))
 	(indented 
 	  (line "CnC::debug::trace( ctx.tags[i] );"))
-	(line "// not tracing steps for now, waiting for trace_all to get fixed")
+	(line "/* not tracing steps for now, waiting for trace_all to get fixed */")
+
+	#|    
+	std::vector< CnC::step_collection<operation_kron, operation_kron>* >::iterator kron_it;
+	std::vector< CnC::step_collection<operation_e, operation_e>* >::iterator e_it;
+	std::vector< CnC::step_collection<operation_x, operation_x>* >::iterator x_it;
+	std::vector< CnC::step_collection<operation_m, operation_m>* >::iterator m_it;
+	for(kron_it=ctx.kron_step_objects.begin(); kron_it < ctx.kron_step_objects.end() ; kron_it++ ) {
+	CnC::debug::trace( **kron_it );
+	}
+	for(e_it=ctx.e_step_objects.begin(); e_it < ctx.e_step_objects.end() ; e_it++ ) {
+	  CnC::debug::trace( **e_it );
+           }
+	for(x_it=ctx.x_step_objects.begin(); x_it < ctx.x_step_objects.end() ; x_it++ ) {
+	  CnC::debug::trace( **x_it );
+	}
+	for(m_it=ctx.m_step_objects.begin(); m_it < ctx.m_step_objects.end() ; m_it++ ) {
+	  CnC::debug::trace( **m_it );
+	}
+|#
+
 	#+nil(loop for step in (cnc-program-steps program)
 	      do (line "CnC::debug::trace( ctx.~A );"
 		       (cnc-step-collection-name step))))

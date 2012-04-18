@@ -64,6 +64,7 @@
 #include <complex>
 #include <stdlib.h>
 #include <unistd.h>
+#include <assert.h>
 #include <new>
 #include <memory>
 
@@ -77,7 +78,8 @@ typedef std::complex<double> amplitude;
 typedef CnC::item_collection<int, amplitude, CnC::vector_tuner> tangle_items_type;
 typedef CnC::tag_collection<int> tangle_tags_type;
 
-inline std::ostream & cnc_format( std::ostream& os, const amplitude& amp )
+template<>
+inline std::ostream & cnc_format<amplitude>( std::ostream& os, const amplitude& amp )
 {
     os << \" ( \" << amp.real() << \" + \" << amp.imag() << \"i\" << \" )\";
     return os;
@@ -459,7 +461,9 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
 	(indented 
 	  (line "CnC::debug::trace( ctx.tags[i] );"))
 	(line "/* not tracing steps for now, waiting for trace_all to get fixed */")
-
+	(line "std::vector< CnC::step_collection<operation_emx_r, operation_emx_r>* >::iterator emx_it;")
+	(line "for(emx_it=ctx.emx_r_step_objects.begin(); emx_it < ctx.emx_r_step_objects.end() ; emx_it++ )")
+	(line "  CnC::debug::trace( **emx_it );")
 	#|    
 	std::vector< CnC::step_collection<operation_kron, operation_kron>* >::iterator kron_it;
 	std::vector< CnC::step_collection<operation_e, operation_e>* >::iterator e_it;

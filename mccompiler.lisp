@@ -675,7 +675,6 @@ here and produce a new graph with correct swap-table."
 
       (let* ((consumed-item (first (cnc-step-collection-consumes emx-operation)))
 	     (prescribing-tags (cnc-item-collection-associated-tags consumed-item)))
-	(print "consuming: ")
 	;; change prescription
 	(setf (cnc-tag-collection-prescribes prescribing-tags) 
 	      (list emx-operation))

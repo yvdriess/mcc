@@ -18,7 +18,7 @@
 
 (defvar *kron-depends-body*
   "
-dC.depends( tangle_1, t );
+//dC.depends( tangle_1, t );
 for( int i(0) ; i < size_2 ; ++i ) {
   dC.depends( tangle_2, i );
 }
@@ -71,7 +71,7 @@ for(int i(0);i<size_2;++i) {
 (defvar *M-depends-body*
    "
 if ( (t & qid) == 0 ) {
-  dC.depends( in_tangle , t );
+//  dC.depends( in_tangle , t );
   dC.depends( in_tangle , t + qid);
 }")
 
@@ -152,15 +152,15 @@ out_tags.put( t );
 
 (defvar *EMX-depends-body*
 "
-if( m_qid != 1 ) {
+//if( m_qid != 1 ) {
   if ( t & (m_qid>>1) ) {
-    dC.depends( in_tangle , t );
+//    dC.depends( in_tangle , t );
     dC.depends( in_tangle , t^(m_qid>>1));
   }
-} 
-else {
-  dC.depends( in_tangle, t );
-}
+//} 
+//else {
+//  dC.depends( in_tangle, t );
+//}
 ")
 
 (defkernel emx_r ((:consumes in_tangle) 

@@ -216,6 +216,44 @@ private:
   (format nil "tuner_get_~d" getcount))
 
 (defun generate-item-tuners (program)
+(declare (ignore program))
+#|
+
+struct tangle;
+
+class tangle_tuner: public CnC::hashmap_tuner {
+public:
+  int _getcount;
+  tangle_tuner(int gc=1): _getcount(gc) {}
+  int get_count( const int & tag ) const { 
+    printf("asked for my getcount\n");
+    return _getcount;
+  }
+  
+};
+
+typedef CnC::item_collection<int, amplitude, tangle_tuner> tangle_col;
+
+class tangle:  public tangle_tuner,
+	       public tangle_col
+ {
+public:
+  template< typename Derived >
+  tangle( CnC::context< Derived >& c, const char* str ) :  
+    tangle_tuner(1),
+    tangle_col(c, str, *this) {}
+
+  void tune_tangle(int max, int getcount=1) {
+    tangle_col::set_max(max);
+    tangle_tuner::_getcount = getcount;
+  }
+ 
+private:
+   int _getcount;
+};
+
+|#
+
   #+nil(line "
 struct tangle : public CnC::hashmap_tuner
 {
@@ -246,9 +284,6 @@ struct tangle : public CnC::hashmap_tuner
 		 do (line "tangle ~A( ~d );"
 			  (getcount-tuner-name N)
 			  N))))
-
-
-
 #|
 (:consumes tangle_1 tangle_2)
 (:produces tangle_out)

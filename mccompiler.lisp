@@ -16,11 +16,11 @@
     (mapcar #'symbol-to-string symlist))
   )
 
-
 (defvar *kron-depends-body*
   "
-for( int t(0) ; t < size_2 ; ++t ) {
-  dC.depends( tangle_2 , t );
+dC.depends( tangle_1, t );
+for( int i(0) ; i < size_2 ; ++i ) {
+  dC.depends( tangle_2, i );
 }
 ")
 
@@ -71,7 +71,7 @@ for(int i(0);i<size_2;++i) {
 (defvar *M-depends-body*
    "
 if ( (t & qid) == 0 ) {
-  //dC.depends( in_tangle , t );
+  dC.depends( in_tangle , t );
   dC.depends( in_tangle , t + qid);
 }")
 
@@ -89,10 +89,10 @@ const int i = t;
 if ( (i & qid) == 0 ) {
   amplitude a_i1;
   amplitude a_i2;
-  const amplitude phi_1 = std::exp(amplitude(0,-angle));
   const int i2 = i + qid;
   in_tangle.get( i  , a_i1 );
   in_tangle.get( i2 , a_i2 );
+  const amplitude phi_1 = std::exp(amplitude(0,-angle));
   const amplitude new_amp = a_i1 - a_i2 * phi_1;
   const int new_index = compact_bit_index(i,qid);
   out_tangle.put( new_index , new_amp );
@@ -134,21 +134,33 @@ out_tags.put( target_index );
 			   (qid int)))
 "
 amplitude a_i;
-const int i = t;
 const int m = qid;
 const int n = size / qid;
 bool signal=true;
 
-in_tangle.get( i , a_i );
+in_tangle.get( t , a_i );
 
-const int f_i = permute( i , n, m );
+const int f_i = permute( t , n, m );
 
 if( signal )
   if (f_i % 2)
     a_i = -a_i;
 
-out_tangle.put( i , a_i );
-out_tags.put( i );
+out_tangle.put( t , a_i );
+out_tags.put( t );
+")
+
+(defvar *EMX-depends-body*
+"
+if( m_qid != 1 ) {
+  if ( t & (m_qid>>1) ) {
+    dC.depends( in_tangle , t );
+    dC.depends( in_tangle , t^(m_qid>>1));
+  }
+} 
+else {
+  dC.depends( in_tangle, t );
+}
 ")
 
 (defkernel emx_r ((:consumes in_tangle) 
@@ -158,11 +170,11 @@ out_tags.put( i );
 			       (e_qid_2 int)
 			       (m_qid   int)
 			       (angle   double)
-			       (x_qid   int)))
+			       (x_qid   int))
+		  (:depends (in_tangle m_qid)
+			    *EMX-depends-body*))
   "
 /*        even  odd  */
-const amplitude phi = std::exp(amplitude(0,-angle));
-
 if( m_qid != 1 ) {  // fresh qubit is NOT the measured qubit
   // only do something half of the time (e.g. measure bit set)
   if( t & (m_qid>>1) ) {  // t is tag of 'odd' amp? (measured bit is set)
@@ -183,7 +195,7 @@ if( m_qid != 1 ) {  // fresh qubit is NOT the measured qubit
 	  amp_odd,  amp_odd };
 
     const int tags[4] = { amp_even_t<<1, (amp_even_t<<1) + 1,
-			    amp_odd_t<<1,  (amp_odd_t<<1)  + 1 };
+			  amp_odd_t<<1,  (amp_odd_t<<1)  + 1 };
 
     for( int i(0); i<4; ++i ) {  // hoping this gets SSE'ed
       amps[i] *= 0.5;
@@ -200,6 +212,7 @@ if( m_qid != 1 ) {  // fresh qubit is NOT the measured qubit
     }
     
     /*  measurement  */
+    const amplitude phi = std::exp(amplitude(0,-angle));
     const amplitude new_amp_0 = (amps[0] - amps[2] * phi);
     const amplitude new_amp_1 = (amps[1] - amps[3] * phi);
     int new_tag_0 = compact_bit_index(t<<1,m_qid);
@@ -229,6 +242,7 @@ if( m_qid != 1 ) {  // fresh qubit is NOT the measured qubit
    amp2 = (t2 & e_qid_1 && t2 & e_qid_2) ?
      -amp1 * 0.5 : amp1 * 0.5;
    /*  measurement   */
+   const amplitude phi = std::exp(amplitude(0,-angle));
    const amplitude new_amp = amp1 - amp2 * phi;
    /*  X-operation   */
    const int new_tag = t ^ x_qid;
@@ -236,8 +250,6 @@ if( m_qid != 1 ) {  // fresh qubit is NOT the measured qubit
    out_tags.put(new_tag);
  }
 ")
-
-
 
 (defkernel source ((:produces out_items)
 		   (:controls out_tags)
@@ -291,50 +303,6 @@ static int compact_bit_index(const int i, const int bit) {
   return ((i - i % (2 * bit)) >> 1) + i % bit;
 }
 ")
-
-#|
-
-// E e_qid1 e_qid2, M m_qid, X x_qid
-struct operation_j2r: public CnC::step_tuner<> {
-  int execute( const int& t, constext& c ) const {
-    
-  const int t1 = t << 1;
-  const int t2 = (t << 1) ^ 1;
-
-  amplitude amp1, amp2;
-    
-  if( t1 & m_qid )
-    return CnC::CNC_Success;
-
-  in_tangle.get(t,amp1);
-  if( m_qid == 1 ) {
-    amp2 = 0.5;
-  }
-  else {
-    in_tangle.get(t ^ (m_qid >> 1),amp2);
-
-  amplitude a1 = amp1 * 0.5;
-  amplitude a2 = amp1 * 0.5;
-  amp1itude a3 = amp2 * 0.5;
-  amp1itude a4 = amp2 * 0.5;
-
-  const int e_q1 = e_qid1 > e_qid2 ? e_qid1 : e_qid2;
-  const int e_q2 = e_qid1 > e_qid2 ? e_qid2 : e_qid1;
-  
-  const int f_i  = tensor_permute( t1 , size , q1, q2 );
-  const int f_i2 = tensor_permute( t2 , size , q1, q2 );
-  
-  if (f_i % 4 == 3)
-    a1 = - a1;
-  if (f_i2 % 4 == 3)
-    a2 = - a2;
-  
-  return CnC::CNC_Success;
-  }
-
-};
-
-|#
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; 1. MC GRAPH TO CNC PROGRAM  ;;;;

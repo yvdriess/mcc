@@ -91,6 +91,7 @@ template<class collection, size_t size>
 class collection_array {
 public:
   collection_array() { /* very unsafe */ }
+
   collection_array(context& c) {
         char str[16];
 	collection *ptr = static_cast<collection*>( (void*)raw );
@@ -99,13 +100,22 @@ public:
 	  new( &ptr[i] )collection( c, str );
 	}
   }
+
   collection& operator[]( size_t i ) const {
     return static_cast<collection*>( (void*)raw )[i]; 
   }
+
+  ~~collection_array() {
+    collection *ptr = static_cast<collection*>( (void*)raw );
+    for( unsigned int i = 0; i < size; ++i ) {
+      ptr[i].~~collection(); //need explicit call to dtor b/o
+			     //placement new
+    }
+  }
+
 private:
   char raw[size*sizeof(collection)];
 };
-
 ")
  
  
@@ -421,7 +431,7 @@ struct tangle : public CnC::hashmap_tuner
 (defun generate-header (program)
   ;; preamble
   (line #.*MIT-license*)
-  (line #.*header-preamble*)
+  (format *line-stream* #.*header-preamble*)
   ;(generate-tuners program)
   (generate-step-headers program)
   (newline)
@@ -495,10 +505,23 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
 	      (length (cnc-program-tags program)))
 	(indented 
 	  (line "CnC::debug::trace( ctx.tags[i] );"))
-	(line "/* not tracing steps for now, waiting for trace_all to get fixed */")
-	(line "std::vector< CnC::step_collection<operation_emx_r, operation_emx_r>* >::iterator emx_it;")
-	(line "for(emx_it=ctx.emx_r_step_objects.begin(); emx_it < ctx.emx_r_step_objects.end() ; emx_it++ )")
-	(line "  CnC::debug::trace( **emx_it );")
+
+	(loop for kernel in (distinct-kernels program)
+	      for step-type = (step-type kernel)
+	      for name = (step-store-name kernel)
+	      for iterator = (format nil "~A_it" name)
+	      do (line "std::vector< ~A* >::iterator ~A;"
+		       (step-type kernel) iterator)
+	      do (line "for( ~A=ctx.~A.begin() ;"
+		       iterator name)
+	      do (line "     ~A < ctx.~A.end() ; ~A++ )"
+		       iterator name iterator)
+	      do (line "  CnC::debug::trace( **~A );" iterator)) 
+	
+	;; (line "/* not tracing steps for now, waiting for trace_all to get fixed */")
+	;; (line "std::vector< CnC::step_collection<operation_emx_r, operation_emx_r>* >::iterator emx_it;")
+	;; (line "for(emx_it=ctx.emx_r_step_objects.begin(); emx_it < ctx.emx_r_step_objects.end() ; emx_it++ )")
+	;; (line "  CnC::debug::trace( **emx_it );")
 	#|    
 	std::vector< CnC::step_collection<operation_kron, operation_kron>* >::iterator kron_it;
 	std::vector< CnC::step_collection<operation_e, operation_e>* >::iterator e_it;

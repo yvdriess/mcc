@@ -677,7 +677,7 @@ here and produce a new graph with correct swap-table."
     (format t "Generating MC program graph... ")
     (let ((mc-graph (compile-mc mc-program)))
       (format t "done~%Collecting data for CnC code generation... ")
-;      (mcg::show-dot mc-graph)
+      (mcg::show-dot mc-graph)
       (let ((cnc-program (mc-graph-to-cnc-program mc-graph)))
 	(cnc::show-dot cnc-program)
 ;	(inspect cnc-program)
@@ -701,3 +701,5 @@ here and produce a new graph with correct swap-table."
  (X 41 (Q 11)) (E 41 46) (M 41 (- 0)) (X 46 (Q 41)) (E 36 51) (M 36 (- 0))
  (X 51 (Q 36)))))
   (compile-to-cnc mc-program))
+
+#+nil

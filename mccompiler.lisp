@@ -16,6 +16,8 @@
     (mapcar #'symbol-to-string symlist))
   )
 
+(defvar *coarsening-optimize* T)
+
 (defvar *kron-depends-body*
   "
 //dC.depends( tangle_1, t );
@@ -327,13 +329,13 @@ static int compact_bit_index(const int i, const int bit) {
 				  swap-table))
 
     ;; third pass: coarsening optimizations
-    (loop for node in (graph-nodes mc-graph)
-	  when (match-emc-p node mc-graph)
-	    do (replace-with-superoperation node swap-table :emc)
-;	    do (format t "EMC match in: ~A~%" (node-label node))
-	       
-	  )
-
+    (when *coarsening-optimize*
+      (loop for node in (graph-nodes mc-graph)
+	when (match-emc-p node mc-graph)
+	do (replace-with-superoperation node swap-table :emc)
+					;	    do (format t "EMC match in: ~A~%" (node-label node))
+	   ))
+    
     ;; collect all information and construct cnc-program object
     (loop for node being each hash-key in swap-table 
 	    using (hash-value collection)
@@ -678,19 +680,28 @@ here and produce a new graph with correct swap-table."
     (let ((mc-graph (compile-mc mc-program)))
       (format t "done~%Collecting data for CnC code generation... ")
       (mcg::show-dot mc-graph)
-      (let ((cnc-program (mc-graph-to-cnc-program mc-graph)))
-	(cnc::show-dot cnc-program)
+      (let* ((*coarsening-optimize* nil)
+	     (cnc-program (mc-graph-to-cnc-program mc-graph)))
+;	(cnc::show-dot cnc-program)
 ;	(inspect cnc-program)
 	(format t "done~%Beginning code generation.~%")
 	(build cnc-program)
 	'ok))))
 
+#+nil(let ((mc-program '((E 1 2) (M 1) (X 2 (q 1)))))
+       (compile-to-cnc mc-program))
+       
 #+nil(let ((mc-program '((E 1 2) (E 3 4) (E 2 4) (M 1) (X 2 (q 1)))))
   (compile-to-cnc mc-program))
 
 #+nil(let ((mc-program '((X 1) (E 3 4) (E 2 3) (E 1 3) (M 2) (M 3) (Z 1 (q
 								    2))
 		    (Z 4 (q 2)) (X 4 (q 3)) (X 1))))
+  (compile-to-cnc mc-program))
+
+;deutch-jozsa
+#+nil(let ((mc-program '((E 1 5) (M 1 0) (X 5 (q 1)) (E 2 3) (M 2 0) (X 3 (q 2)) (E 3 4) (M 3 -pi) (X 4 (q 3)) (E 4 7) (M 4 0) (X 7 (q 4)) (E 5 6) (M 5 0) (X 6 (q 5)))
+))
   (compile-to-cnc mc-program))
 
 #+nil(let ((mc-program '((E 1 0) (M 1 (- 0)) (X 0 (Q 1)) (E 0 5) (M 0 (- -0.7853981633974483))
@@ -702,4 +713,3 @@ here and produce a new graph with correct swap-table."
  (X 51 (Q 36)))))
   (compile-to-cnc mc-program))
 
-#+nil

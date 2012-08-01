@@ -930,7 +930,8 @@ connections to the program graph."
 
 
 ;;;; make an executable for finding the average parallelism of an MC program
-; (sb-ext:save-lisp-and-die "calcpar" :executable t :toplevel #'read-and-calc-par)
+
+;(sb-ext:save-lisp-and-die "/Users/yvdriess/dev/mcc/calcpar" :executable t :toplevel #'read-and-calc-par)
 
 (defun read-and-calc-par (&optional program)
   (sb-sys:enable-interrupt sb-unix:sigint #'(lambda () (sb-ext:quit)))
@@ -941,4 +942,5 @@ connections to the program graph."
 	(calc-avg-par (compile-mc mc-program))
       (format t "~f ~d ~d~%" avg seq par))))
 
+;(read-and-calc-par '((E 1 2) (M 1) (X 2 (q 1))))
 

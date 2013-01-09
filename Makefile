@@ -27,7 +27,7 @@ DEST_OBJS=$(SOURCES:.C=.o)
 all:  mccompiled
 
 mccompiled: $(DEST_OBJS)
-	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNCROOT)/lib/$(ARCH) -lrt -lcnc -ltbb -ltbbmalloc 
+	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNCROOT)/lib/$(ARCH) -lm -lrt -lcnc -ltbb -ltbbmalloc 
 
 %.o: %.C %.h
 	$(CXX) $(CPPFLAGS) -c -I$(CNCROOT)/include -o $@ $<

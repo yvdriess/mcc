@@ -472,6 +472,8 @@ power of two of the tangle size"
   qubit-2)
 
 (defgeneric qubit-dependencies (operation))
+(defmethod qubit-dependencies ((operation ag-correction))
+  (list (ag-correction-qubit operation)))
 (defmethod qubit-dependencies ((operation ag-measurement))
   (list (ag-measurement-qubit operation)))
 (defmethod qubit-dependencies ((operation ag-entanglement))

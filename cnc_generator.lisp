@@ -473,7 +473,7 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
       scheduler_stats=1;
       break;
     case 'd':
-      debug_level = 1;
+      debug_level = optarg == NULL ? 1 : atoi(optarg);
       break;
     case '?':
           if (optopt == 't')
@@ -495,28 +495,29 @@ while ((c = getopt (argc, argv, \"dist:\")) != -1)
 
       (line "if (debug_level) { ")
       (indented
-	(line "// doesn't work on CnC 0.7 anymore")
-	(line "//CnC::debug::trace_all(ctx, \"context\");")
-	(line "for( int i(0); i<~d; ++i)"
+	(line "// trace_all doesn't work on CnC 0.7, should work on 0.8")
+	(line "CnC::debug::trace_all(ctx,debug_level);")
+	(line "// use commented-out code below if trace_all doesn't work")
+	(line "//for( int i(0); i<~d; ++i)"
 	      (length (cnc-program-items program)))
 	(indented 
-	  (line "CnC::debug::trace( ctx.items[i] );"))
-	(line "for( int i(0); i<~d; ++i)"
+	  (line "//CnC::debug::trace( ctx.items[i] );"))
+	(line "//for( int i(0); i<~d; ++i)"
 	      (length (cnc-program-tags program)))
 	(indented 
-	  (line "CnC::debug::trace( ctx.tags[i] );"))
+	  (line "//CnC::debug::trace( ctx.tags[i] );"))
 
 	(loop for kernel in (distinct-kernels program)
 	      for step-type = (step-type kernel)
 	      for name = (step-store-name kernel)
 	      for iterator = (format nil "~A_it" name)
-	      do (line "std::vector< ~A* >::iterator ~A;"
+	      do (line "//std::vector< ~A* >::iterator ~A;"
 		       (step-type kernel) iterator)
-	      do (line "for( ~A=ctx.~A.begin() ;"
+	      do (line "//for( ~A=ctx.~A.begin() ;"
 		       iterator name)
-	      do (line "     ~A < ctx.~A.end() ; ~A++ )"
+	      do (line "//     ~A < ctx.~A.end() ; ~A++ )"
 		       iterator name iterator)
-	      do (line "  CnC::debug::trace( **~A );" iterator)) 
+	      do (line "//  CnC::debug::trace( **~A );" iterator)) 
 	
 	;; (line "/* not tracing steps for now, waiting for trace_all to get fixed */")
 	;; (line "std::vector< CnC::step_collection<operation_emx_r, operation_emx_r>* >::iterator emx_it;")
@@ -649,21 +650,28 @@ value in cdr."
 	(cnc::cnc-item-tuner-get-count tuner)
 	1)))
 
+(defun cleanup-print-param (param) 
+  (format nil 
+	  (if (floatp param) "~G" "~A") 
+	  param))
+
 (defun operation-instance (step program)
   (let ((bindings (all-step-bindings step program)))
     ;; using the order with which the step kernel ctor was defined:
     ;; consumes, produces, controls and then parameters
     (format nil "~A(~{~A~^,~})"
 	    (operation-type step)
-	    (mapcar #'cdr 
-		    (marshal-bindings-for-kernel bindings
-						 (cnc-step-collection-kernel step)))
+	    (mapcar #'cleanup-print-param
+		    (mapcar #'cdr
+			    (marshal-bindings-for-kernel bindings
+							 (cnc-step-collection-kernel step))))
 	    #+nil(append
 		  (mapcar #'item-index (cnc-step-collection-consumes step))
 		  (mapcar #'item-index (cnc-step-collection-produces step))
 		  (mapcar #'tag-index (cnc-step-collection-controls step))
-		  (mapcar #'actual-parameter-value 
-			  (cnc-step-collection-parameter-bindings step))))))
+		  (mapcar #'cleanup-print-param 
+		     (mapcar #'actual-parameter-value 
+			     (cnc-step-collection-parameter-bindings step)))))))
 
 (defun prescribed-by (step program)
   (let* ((prescriptions (cnc-program-prescriptions program))

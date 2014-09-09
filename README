@@ -7,7 +7,9 @@ Measurement Calculus Compiler
 Files included:
  - graph.lisp : Common Lisp source code for the MC compiler
  - cnc_generator.lisp : C++ code generator, using the Intel CnC library; used by graph.lisp
- - w3.mc : non-trivial example of a Measurement Calculus program
+ - cnc_model.lisp : Common Lisp abstractions to help build a CnC graph representation
+ - w3.mc : non-trivial example of a Measurement Calculus program producing a W3 entanglement state.
+ - qft/qft[2-22].mc : Quantum Fourier Transform examples, Measurement Calculus programs generated from the recursive quantum circuit definition.
  - Makefile, *.sh, ... : setup and compilation scripts, see below
 
 Any questions or comments can be sent to 'yvdriess at vub.ac.be'
@@ -16,10 +18,10 @@ Any questions or comments can be sent to 'yvdriess at vub.ac.be'
 ---------------
 
 Requires
- - Intel Thread Building Blocks 3.0
-	http://threadingbuildingblocks.org/ver.php?fid=173
- - Intel Concurrent Collections 0.6
-	http://software.intel.com/en-us/articles/pre-release-license-agreement-for-intel-concurrent-collections-for-cc-accept-end-user-license-agreement-and-download/
+ - Intel Thread Building Blocks 3.0 or more
+	http://threadingbuildingblocks.org/
+ - Intel Concurrent Collections 0.8 or more
+   	https://icnc.github.io/
  - Steel Bank Common Lisp (sbcl) with quicklisp installed to bootstrap the compiler
  - Make sure all the TBB and CnC environment variables are set
 
@@ -31,7 +33,8 @@ Bootstrapping
 
 Compiler
  './mcc < w3.mc' feeds a non-trivial (W3-entanglement creation) quantum computation to the compiler; producing C++ source and header files, respectively 'mccompiled.C' and 'mccompiled.h'
-
+ QFT examples for 2 to 22 qubits can be found in the qft/ directory.
+ 
 Running the mccompiled program
- run 'make' to build the generated C++ program and run the resulting './mccompiled'. There are two optional arguments. The first argument to mccmopiled is if you want to trace all collections (1) or not (0). As a second argument you can pass the number of threads CnC needs to limit itself to.
-	./mccompiled [trace [num_threads]]
+ run 'make' to build the generated C++ program and run the resulting './mccompiled'. You can control the number of threads with the -t argument, -s will make CnC report scheduler statistics and -d will output a CnC execution trace for debugging purposes.
+	./mccompiled [-t num_threads] [-s] [-d]

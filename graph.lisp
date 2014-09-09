@@ -472,6 +472,8 @@ power of two of the tangle size"
   qubit-2)
 
 (defgeneric qubit-dependencies (operation))
+(defmethod qubit-dependencies ((operation ag-correction))
+  (list (ag-correction-qubit operation)))
 (defmethod qubit-dependencies ((operation ag-measurement))
   (list (ag-measurement-qubit operation)))
 (defmethod qubit-dependencies ((operation ag-entanglement))
@@ -775,6 +777,71 @@ connections to the program graph."
 					; (sb-ext:run-program "/Applications/Graphviz.app/Contents/MacOS/Graphviz" (list "/tmp/graph.dot"))
   )
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;         MISC           ;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defun get-input-tangle (node)
+  (first (remove-if-not #'tangle-p 
+			(mapcar #'node-content 
+				(node-upstream-nodes node)))))
+
+(defgeneric calc-total-work (op node))
+(defmethod calc-total-work (op node) 0) 
+(defmethod calc-total-work ((op ag-entanglement) node)
+  (/ (tangle-size (get-input-tangle node)) 4))
+(defmethod calc-total-work ((op ag-z-correction) node)
+  (/ (tangle-size (get-input-tangle node)) 2))
+(defmethod calc-total-work ((op ag-measurement) node)
+  (tangle-size (get-input-tangle node)))
+(defmethod calc-total-work ((op kronecker-operation) node)
+  (let ((output-tangle (first (remove-if-not #'tangle-p 
+					     (mapcar #'node-content 
+						     (node-downstream-nodes node))))))
+    (tangle-size output-tangle)))
+
+
+(defgeneric calc-critical-path (op node))
+(defmethod calc-critical-path (op node) 0)
+(defmethod calc-critical-path ((op ag-entanglement) node) 0)
+(defmethod calc-critical-path ((op ag-z-correction) node) 1)
+(defmethod calc-critical-path ((op ag-measurement) node) 2)
+(defmethod calc-critical-path ((op kronecker-operation) node) 1)
+
+
+(defun select-longest-path (paths)
+  (loop for path in paths
+     with max-length = (loop for path in paths
+			  maximize (length path))
+     when (= (length path) max-length)
+     return path))
+
+(defun walk-path (node)
+  (if (and node
+	   ; ignoring signal maps
+	   (or (operation-p (node-content node)) 
+	       (tangle-p (node-content node))))
+      (let ((paths-from-here (mapcar #'walk-path (node-downstream-nodes node))))
+	(cons node (select-longest-path paths-from-here)))))
+;(mapcar #'length (mapcar #'walk-path (graph-input-nodes (compile-mc *w3-program*))))
+;(mapcar #'walk-path (graph-input-nodes (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1))))))
+
+(defun critical-path-nodes (mc-graph)
+  (select-longest-path (mapcar #'walk-path (graph-input-nodes mc-graph))))
+
+(defun calc-avg-par (mc-graph)
+  (let ((total-work 0)
+	(critical-path-work 0)
+	(critical-path (critical-path-nodes mc-graph)))
+    (loop for node in (graph-nodes mc-graph)
+          for content = (node-content node)
+	 do (incf total-work (calc-total-work content node)))
+    (loop for node in critical-path
+          for content = (node-content node)
+       do (incf critical-path-work (calc-critical-path content node)))
+    (if (zerop critical-path-work)
+	0
+	(values (/ total-work critical-path-work) total-work critical-path-work))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -854,7 +921,26 @@ connections to the program graph."
 	  (E 8 13) (E 9 18))))
 
 					;(show-dot (compile-mc *w3-program*))
+;					(calc-avg-par (compile-mc *w3-program*))
+
+
 
 					;(show-dot (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1)))))
+;(calc-avg-par (compile-mc '((E 1 2) (M 1 0) (X 2 (q 1)))))
 
+
+;;;; make an executable for finding the average parallelism of an MC program
+
+;(sb-ext:save-lisp-and-die "/Users/yvdriess/dev/mcc/calcpar" :executable t :toplevel #'read-and-calc-par)
+
+(defun read-and-calc-par (&optional program)
+  (sb-sys:enable-interrupt sb-unix:sigint #'(lambda () (sb-ext:quit)))
+  (let ((mc-program (if program 
+			program 
+			(read *standard-input* nil))))
+    (multiple-value-bind (avg seq par) 
+	(calc-avg-par (compile-mc mc-program))
+      (format t "~f ~d ~d~%" avg seq par))))
+
+;(read-and-calc-par '((E 1 2) (M 1) (X 2 (q 1))))
 

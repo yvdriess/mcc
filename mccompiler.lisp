@@ -16,20 +16,15 @@
     (mapcar #'symbol-to-string symlist))
   )
 
+(defvar *coarsening-optimize* T)
 
 (defvar *kron-depends-body*
   "
-for( int t(0) ; t < size_2 ; ++t ) {
-  dC.depends( tangle_2 , t );
+//dC.depends( tangle_1, t );
+for( int i(0) ; i < size_2 ; ++i ) {
+  dC.depends( tangle_2, i );
 }
 ")
-(defvar *M-depends-body*
-   "
-if ( (t & qid) == 0 ) {
-  dC.depends( in_tangle , t );
-  dC.depends( in_tangle , t + qid);
-}"
-   )
 
 (defkernel E ((:consumes in_items) 
 	      (:produces out_items) 
@@ -39,14 +34,15 @@ if ( (t & qid) == 0 ) {
 			   (qid_2 int)))
 "
 amplitude a_i;
-const int q1 = qid_1 > qid_2 ? qid_1 : qid_2;
-const int q2 = qid_1 > qid_2 ? qid_2 : qid_1;
+//const int q1 = qid_1 > qid_2 ? qid_1 : qid_2;
+//const int q2 = qid_1 > qid_2 ? qid_2 : qid_1;
 
 in_items.get( t , a_i );
 
-const int f_i = tensor_permute( t , size , q1, q2 );
+//const int f_i = tensor_permute( t , size , q1, q2 );
+//if (f_i % 4 == 3)
 
-if (f_i % 4 == 3)
+if( t & qid_1 && t & qid_2 ) 
   a_i = - a_i;
 
 out_items.put( t , a_i );
@@ -57,9 +53,7 @@ out_tags.put( t );
 		 (:produces tangle_out)
 		 (:controls tag_out)
 		 (:parameters (size_2 int))
-		 (:depends ((tangle_1 tangle_items_type)
-			    (tangle_2 tangle_items_type)
-			    (size_2 int))
+		 (:depends (tangle_2 size_2)
 			   *kron-depends-body*))
   "
 amplitude amp_1;
@@ -70,11 +64,18 @@ for(int i(0);i<size_2;++i) {
   tangle_2.get(i,amps[i]);
 }
 for(int i(0);i<size_2;++i) {
-  const unsigned int new_index( t * size_2 + i );
+  const int new_index( t * size_2 + i );
   tangle_out.put( new_index, amp_1 * amps[i] );
   tag_out.put(new_index);
 }
 ")
+
+(defvar *M-depends-body*
+   "
+if ( (t & qid) == 0 ) {
+//  dC.depends( in_tangle , t );
+  dC.depends( in_tangle , t + qid);
+}")
 
 (defkernel M ((:consumes in_tangle) 
 	      (:produces out_tangle) 
@@ -82,21 +83,20 @@ for(int i(0);i<size_2;++i) {
 	      (:parameters (size int) 
 			   (qid int)
 			   (angle double))
-	      (:depends ((in_tangle tangle_items_type)
-			 (qid int))
+	      (:depends (in_tangle qid)
 			*M-depends-body*))
   "
-const unsigned int i = t;
+const int i = t;
 
 if ( (i & qid) == 0 ) {
   amplitude a_i1;
   amplitude a_i2;
-  const amplitude phi_1 = std::exp(amplitude(0,-angle));
-  const unsigned int i2 = i + qid;
+  const int i2 = i + qid;
   in_tangle.get( i  , a_i1 );
   in_tangle.get( i2 , a_i2 );
+  const amplitude phi_1 = std::exp(amplitude(0,-angle));
   const amplitude new_amp = a_i1 - a_i2 * phi_1;
-  const unsigned int new_index = compact_bit_index(i,qid);
+  const int new_index = compact_bit_index(i,qid);
   out_tangle.put( new_index , new_amp );
   out_tags.put( new_index );
 }
@@ -111,9 +111,11 @@ if ( (i & qid) == 0 ) {
   "
 amplitude a_i;
 const int i = t;
+/*
 const int m = qid;
 const int n = size / qid;
 bool signal=true;
+*/
 
 in_tangle.get( i , a_i );
 /* 
@@ -134,21 +136,121 @@ out_tags.put( target_index );
 			   (qid int)))
 "
 amplitude a_i;
-const int i = t;
 const int m = qid;
 const int n = size / qid;
 bool signal=true;
 
-in_tangle.get( i , a_i );
+in_tangle.get( t , a_i );
 
-const int f_i = permute( i , n, m );
+const int f_i = permute( t , n, m );
 
 if( signal )
   if (f_i % 2)
     a_i = -a_i;
 
-out_tangle.put( i , a_i );
-out_tags.put( i );
+out_tangle.put( t , a_i );
+out_tags.put( t );
+")
+
+(defvar *EMX-depends-body*
+"
+//if( m_qid != 1 ) {
+  if ( t & (m_qid>>1) ) {
+//    dC.depends( in_tangle , t );
+    dC.depends( in_tangle , t^(m_qid>>1));
+  }
+//} 
+//else {
+//  dC.depends( in_tangle, t );
+//}
+")
+
+(defkernel emx_r ((:consumes in_tangle) 
+		  (:produces out_tangle) 
+		  (:controls out_tags)
+		  (:parameters (e_qid_1 int)
+			       (e_qid_2 int)
+			       (m_qid   int)
+			       (angle   double)
+			       (x_qid   int))
+		  (:depends (in_tangle m_qid)
+			    *EMX-depends-body*))
+  "
+/*        even  odd  */
+if( m_qid != 1 ) {  // fresh qubit is NOT the measured qubit
+  // only do something half of the time (e.g. measure bit set)
+  if( t & (m_qid>>1) ) {  // t is tag of 'odd' amp? (measured bit is set)
+    /*  fetching readied amplitude and it's partner needed in
+	measurement below */
+    amplitude amp_odd, amp_even;
+    const int amp_odd_t   = t;
+    const int amp_even_t  = t^(m_qid>>1);  // m_qid's tag _before_ tensor
+    in_tangle.get(amp_odd_t,  amp_odd);
+    in_tangle.get(amp_even_t, amp_even);
+    
+    /*      m_qid--v
+       amp_even|...0...> + amp_odd|...1...>   
+    */ 
+    /*  tensor product with fresh qubit 0.5|0> + 0.5|1> */
+     amplitude amps[4] = 
+	{ amp_even, amp_even,   
+	  amp_odd,  amp_odd };
+
+    const int tags[4] = { amp_even_t<<1, (amp_even_t<<1) + 1,
+			  amp_odd_t<<1,  (amp_odd_t<<1)  + 1 };
+
+    for( int i(0); i<4; ++i ) {  // hoping this gets SSE'ed
+      amps[i] *= 0.5;
+    }
+    /*
+	amps[0]|...0...>|0> + amps[1]|...0...>|1> +  
+	amps[0]|...1...>|0> + amps[2]|...1...>|1>  
+     */
+
+    /*  controlled-Z  */
+    for( int i(0); i<4; ++i ) {  // hoping this gets SSE'ed
+      if( tags[i] & e_qid_1 && tags[i] & e_qid_2 ) 	
+	amps[i] *= -1;
+    }
+    
+    /*  measurement  */
+    const amplitude phi = std::exp(amplitude(0,-angle));
+    const amplitude new_amp_0 = (amps[0] - amps[2] * phi);
+    const amplitude new_amp_1 = (amps[1] - amps[3] * phi);
+    int new_tag_0 = compact_bit_index(t<<1,m_qid);
+    int new_tag_1 = compact_bit_index(t<<1,m_qid) + 1;
+    assert(new_tag_0 == (new_tag_1 ^ 1));
+    /*  X-operation  */
+    new_tag_0 ^= x_qid;
+    new_tag_1 ^= x_qid;
+
+    /*  output       */
+    out_tangle.put(new_tag_0, new_amp_0);
+    out_tangle.put(new_tag_1, new_amp_1);
+    out_tags.put(new_tag_0);
+    out_tags.put(new_tag_1);
+  }
+ }
+ else { // fresh qubit IS the measured qubit
+        // this should not happen a lot
+   amplitude amp1, amp2;
+   in_tangle.get(t,amp1);
+   /*  tensor        */
+   const int t1 = t<<1;
+   const int t2 = (t<<1)+1;
+   /*  controlled-Z  */
+   amp1 = (t1 & e_qid_1 && t1 & e_qid_2) ?
+     -amp1 * 0.5 : amp1 * 0.5;
+   amp2 = (t2 & e_qid_1 && t2 & e_qid_2) ?
+     -amp1 * 0.5 : amp1 * 0.5;
+   /*  measurement   */
+   const amplitude phi = std::exp(amplitude(0,-angle));
+   const amplitude new_amp = amp1 - amp2 * phi;
+   /*  X-operation   */
+   const int new_tag = t ^ x_qid;
+   out_tangle.put(new_tag, new_amp); 
+   out_tags.put(new_tag);
+ }
 ")
 
 (defkernel source ((:produces out_items)
@@ -176,13 +278,13 @@ for( int i(0) ; i < size ; ++i ) {
 
 (defvar *source-tensor-permute-function*
 "
-static unsigned int tensor_permute(const unsigned int i,const unsigned int siz, 
-                                   const unsigned int i1, const unsigned int i2) {
+static int tensor_permute(const int i,const int siz, 
+                                   const int i1, const int i2) {
   // MAKE SURE i1 >= i2 !!!
   // const int o = i1;
-  const unsigned int m = 2;
-  const unsigned int n = (i1 / i2);
-  const unsigned int p = i2;
+  const int m = 2;
+  const int n = (i1 / i2);
+  const int p = i2;
    return 
     i 
     + p * ( n - 1 ) * floor( i / p      )
@@ -192,14 +294,14 @@ static unsigned int tensor_permute(const unsigned int i,const unsigned int siz,
   
  (defvar *source-permute-function*
 "
-static unsigned int permute(const unsigned int i,const unsigned int m, 
-                            const unsigned int n) {
+static int permute(const int i,const int m, 
+                   const int n) {
   return n * ( i % m ) + floor( i / m ); 
 }")
   
  (defvar *source-compact-index-function*
 "
-static unsigned int compact_bit_index(const unsigned int i, const unsigned int bit) {
+static int compact_bit_index(const int i, const int bit) {
   return ((i - i % (2 * bit)) >> 1) + i % bit;
 }
 ")
@@ -207,9 +309,6 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; 1. MC GRAPH TO CNC PROGRAM  ;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;; TODO: THROW AWAY (DEPRACATE) INTERMEDIATE CNC-GRAPH REPRESENTATION
-;;  BUILD CNC-PROGRAM DIRECTLY FROM MC-GRAPH
 
 (defun mc-graph-to-cnc-program (mc-graph)
   (let ((swap-table (make-hash-table)))
@@ -228,6 +327,16 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 	  do (process-second-pass (node-content node) 
 				  node
 				  swap-table))
+
+    ;; third pass: coarsening optimizations
+    (when *coarsening-optimize*
+      (loop for node in (graph-nodes mc-graph)
+	when (match-emc-p node mc-graph)
+	do (replace-with-superoperation node swap-table :emc)
+					;	    do (format t "EMC match in: ~A~%" (node-label node))
+	   ))
+    
+    ;; collect all information and construct cnc-program object
     (loop for node being each hash-key in swap-table 
 	    using (hash-value collection)
 	  when (cnc::cnc-item-collection-p collection)
@@ -399,23 +508,7 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
   "slight variation on ag-operation: consumes two, produces one"
   (assert (= (length (producing node swap-table)) 2))
   (let ((step-collection (gethash node swap-table)))
-    (with-slots ((name cnc::cnc-step-collection-name)
-		     (kernel cnc::cnc-step-collection-kernel) 
-		     (produces cnc::cnc-step-collection-produces) 
-		     (consumes cnc::cnc-step-collection-consumes) 
-		     (controls cnc::cnc-step-collection-controls)
-		     (parameter-bindings
-			    cnc::cnc-step-collection-parameter-bindings))
-	step-collection
-      (setf name     (gensym (format nil "~A_" (process-name content)))
-	    kernel   (get (process-name content) 'kernel)
-	    produces (producing node swap-table)
-	    consumes (consuming node swap-table)
-	    controls (cnc::cnc-item-collection-associated-tags (first (producing node swap-table)))
-	    parameter-bindings 
-	    (list (cnc::make-actual-parameter 
-		   :name 'size_2
-		   :value (mcg::tangle-size (second (consuming node swap-table)))))))))
+))
 
 (defun process-name (content)
   (typecase content
@@ -434,7 +527,7 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 	 :name 'size
 	 :value (mcg::tangle-size (first consuming-tangles)))
 	(cnc::make-actual-parameter 
-	 :name 'qubit
+	 :name 'qid
 	 :value (mcg::qubit-tensor-index (mcg::ag-correction-qubit content) 
 					 (first consuming-tangles)))))
 
@@ -478,6 +571,103 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
 	 :name 'size_2
 	 :value (mcg::tangle-size (second consuming-tangles)))))
 
+(defun select-downstream-nodes (predicate node)
+  (remove-if-not predicate (node-downstream-nodes node)
+		 :key #'node-content))
+
+(defun walk-next-operation-node (node)
+  (let ((tangle-nodes (select-downstream-nodes #'mcg::tangle-p 
+					       node)))
+    (and tangle-nodes
+	 (= (length tangle-nodes) 1)
+	 (select-downstream-nodes #'mcg::operation-p 
+				  (first tangle-nodes))
+	 (first (select-downstream-nodes #'mcg::operation-p 
+					 (first tangle-nodes))))))
+    
+(defun match-emc-p (node mc-graph)
+  "Checks several conditions: 
+  consecutive operations: tensor, E, M and X; 
+  second (right side) tangle only contains a fresh qubit"
+  (let ((content (node-content node)))
+    (and (mcg::kronecker-operation-p content)
+	 (let* ((tangle-nodes (node-upstream-nodes node)))
+	   ;; checking if the tangle on the right only has a fresh qubit
+	   (and (= 2 (mcg::tangle-size (node-content (second tangle-nodes))))
+		(input-node-p (second tangle-nodes) mc-graph)))
+	 (let ((E-node (walk-next-operation-node node)))
+	   (and (mcg::ag-entanglement-p (node-content E-node))
+		(let ((M-node (walk-next-operation-node E-node)))
+		  (and (mcg::ag-measurement-p (node-content M-node))
+		       ;;account for signal-node
+		       (walk-next-operation-node M-node)
+		       (mcg::ag-x-correction-p (node-content 
+						(walk-next-operation-node
+						 M-node))))))))))
+
+(defun select-and-set-param (step old-param-name new-param-name)
+  (let ((param (find old-param-name (cnc-step-collection-parameter-bindings step)
+		     :key #'actual-parameter-name)))
+    (setf (cnc::actual-parameter-name param) new-param-name)
+    param))
+
+
+(defmethod replace-with-superoperation ((node mcg::node) 
+					(swap-table hash-table) 
+					(type (eql :emc)))
+  "Creates new cnc operation and puts it in place of the old EMC
+operations, manipulating cnc objects in swap table.  
+Hacky implementation, ideally you would want to take a (sub-)graph
+here and produce a new graph with correct swap-table."
+  (flet ((swap (node) (gethash node swap-table))
+	 (forget-node (node) (assert (remhash node swap-table))))
+    (let* ((kron-node          node)
+	   (fresh-tangle-node  (second (node-upstream-nodes node)))
+	   (tangle-kron-E-node (first (node-downstream-nodes node)))
+	   (E-node             (first (node-downstream-nodes tangle-kron-E-node)))
+	   (tangle-E-M-node    (first (node-downstream-nodes E-node)))
+	   (M-node             (first (node-downstream-nodes tangle-E-M-node)))
+	   (tangle-M-X-node    (first (node-downstream-nodes M-node)))
+	   (X-node             (first (node-downstream-nodes tangle-M-X-node)))
+	   (emx-operation 
+	     (cnc::make-cnc-step-collection 
+	      :name     (gensym "emx_")
+	      :kernel   (get 'emx_r 'kernel)
+	      :produces (cnc-step-collection-produces (swap X-node))
+	      :consumes (list (first (cnc-step-collection-consumes (swap kron-node))))
+	      :controls (cnc-step-collection-controls (swap X-node))
+	      :parameter-bindings 
+	      (mapcar #'select-and-set-param
+		      (mapcar #'swap 
+			      (list E-node E-node M-node M-node X-node))
+		      '(  qid_1   qid_2   qid angle   qid)
+		      '(e_qid_1 e_qid_2 m_qid angle x_qid)))))
+
+      (let* ((consumed-item (first (cnc-step-collection-consumes emx-operation)))
+	     (prescribing-tags (cnc-item-collection-associated-tags consumed-item)))
+	;; change prescription
+	(setf (cnc-tag-collection-prescribes prescribing-tags) 
+	      (list emx-operation))
+	;; currently a hack, letting the kron-node stand in for the
+	;; emx operation, better solution is to change the mc-graph
+	(setf (gethash kron-node swap-table) emx-operation)
+	
+	;; remove all above nodes from swap-table, except kron-node
+	;; that will act as achor for the emc-operation
+	(mapcar #'forget-node (list E-node M-node X-node))
+	(mapcar #'forget-node
+		(list fresh-tangle-node tangle-kron-e-node
+		      tangle-e-m-node tangle-m-x-node)))
+
+	#+nil((:consumes in_tangle) 
+	      (:produces out_tangle) 
+	      (:controls out_tags)
+	      (:parameters (e_qid_1 int)
+			   (e_qid_2 int)
+			   (m_qid   int)
+			   (angle   double)
+			   (x_qid   int)))
+      )))
 
 (defun compile-to-cnc (&optional program)
   (sb-sys:enable-interrupt sb-unix:sigint #'(lambda () (sb-ext:quit)))
@@ -490,12 +680,36 @@ static unsigned int compact_bit_index(const unsigned int i, const unsigned int b
     (let ((mc-graph (compile-mc mc-program)))
       (format t "done~%Collecting data for CnC code generation... ")
       (mcg::show-dot mc-graph)
-      (let ((cnc-program (mc-graph-to-cnc-program mc-graph)))
+      (let* ((*coarsening-optimize* nil)
+	     (cnc-program (mc-graph-to-cnc-program mc-graph)))
 ;	(cnc::show-dot cnc-program)
 ;	(inspect cnc-program)
 	(format t "done~%Beginning code generation.~%")
 	(build cnc-program)
 	'ok))))
 
+#+nil(let ((mc-program '((E 1 2) (M 1) (X 2 (q 1)))))
+       (compile-to-cnc mc-program))
+       
 #+nil(let ((mc-program '((E 1 2) (E 3 4) (E 2 4) (M 1) (X 2 (q 1)))))
   (compile-to-cnc mc-program))
+
+#+nil(let ((mc-program '((X 1) (E 3 4) (E 2 3) (E 1 3) (M 2) (M 3) (Z 1 (q
+								    2))
+		    (Z 4 (q 2)) (X 4 (q 3)) (X 1))))
+  (compile-to-cnc mc-program))
+
+;deutch-jozsa
+#+nil(let ((mc-program '((E 1 5) (M 1 0) (X 5 (q 1)) (E 2 3) (M 2 0) (X 3 (q 2)) (E 3 4) (M 3 -pi) (X 4 (q 3)) (E 4 7) (M 4 0) (X 7 (q 4)) (E 5 6) (M 5 0) (X 6 (q 5)))
+))
+  (compile-to-cnc mc-program))
+
+#+nil(let ((mc-program '((E 1 0) (M 1 (- 0)) (X 0 (Q 1)) (E 0 5) (M 0 (- -0.7853981633974483))
+ (X 5 (Q 0)) (E 11 5) (E 5 12) (M 5 (- 0)) (X 12 (Q 5)) (E 11 12) (E 12 19)
+ (M 12 (- -0.7853981633974483)) (X 19 (Q 12)) (E 11 19) (E 19 26) (M 19 (- 0))
+ (X 26 (Q 19)) (E 26 31) (M 26 (- 1.5707963267948966)) (X 31 (Q 26)) (E 31 36)
+ (M 31 (- 0)) (X 36 (Q 31)) (E 11 41) (M 11 (- 0.7853981633974483))
+ (X 41 (Q 11)) (E 41 46) (M 41 (- 0)) (X 46 (Q 41)) (E 36 51) (M 36 (- 0))
+ (X 51 (Q 36)))))
+  (compile-to-cnc mc-program))
+

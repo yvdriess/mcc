@@ -30,7 +30,7 @@ mccompiled: $(DEST_OBJS)
 	$(CXX) $(CPPFLAGS) -o $@ $(DEST_OBJS) -L$(CNCROOT)/lib/$(ARCH) -lrt -lcnc -ltbb -ltbbmalloc 
 
 %.o: %.C %.h
-	$(CXX) $(CPPFLAGS) -c -I$(CNCROOT)/include -o $@ $<
+	$(CXX) $(CPPFLAGS) -c -I$(TBBROOT)/include -I$(CNCROOT)/include -o $@ $<
 
 clean:
 	rm -f $(TARGETS) $(DEST_OBJS)

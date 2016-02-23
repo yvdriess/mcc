@@ -38,3 +38,10 @@ Compiler
 Running the mccompiled program
  run 'make' to build the generated C++ program and run the resulting './mccompiled'. You can control the number of threads with the -t argument, -s will make CnC report scheduler statistics and -d will output a CnC execution trace for debugging purposes.
 	./mccompiled [-t num_threads] [-s] [-d]
+	
+3.  See Also
+-------------
+MCC compiles to a low-level 'quantum virtual machine' instruction set.
+
+A fast stand-alone implementation of the low-level measurement calculus operations can be found on github as well:
+   https://github.com/yvdriess/qvm
